@@ -196,10 +196,7 @@ function AuthScreen({ onLogin }) {
             {mode==='login'?'Sign In':'Create Account'}
           </button>
         </div>
-        <p className="text-xs text-gray-400 text-center mt-4">
-          Demo — User: <span className="font-mono">rachel@example.com / pass123</span>
-          &nbsp;·&nbsp;Nutritionist: <span className="font-mono">dr.joseph@ttan.tt / ttan123</span>
-        </p>
+
       </div>
     </div>
   );
