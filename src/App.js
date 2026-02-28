@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Plus, Scan, Trash2, Package, AlertCircle, ChefHat, Clock, Users, Leaf, Share2, Bell, BookOpen, LogOut, CheckCircle, XCircle, Send, Eye, Target, Flag, Calendar, FileText, Activity } from 'lucide-react';
+import { Plus, Scan, Trash2, Package, AlertCircle, ChefHat, Clock, Users, Leaf, Share2, Bell, BookOpen, LogOut, CheckCircle, XCircle, Send, Eye, Target, Flag, } from 'lucide-react';
 
 // ─── MOCK USERS ───────────────────────────────────────────────────────────────
 const MOCK_USERS = [
