@@ -1,4 +1,6 @@
 import React, { useState } from 'react';
+import { Plus, Scan, Trash2, Package, AlertCircle, ChefHat, Clock, Users, Leaf, Share2, Bell, BookOpen, LogOut, CheckCircle, XCircle, Send, Eye } from 'lucide-react';
+
 // ─── MOCK USERS ───────────────────────────────────────────────────────────────
 const MOCK_USERS = [
   { id: 1, name: 'Rachel Salandy',   email: 'rachel@example.com', password: 'pass123', role: 'user' },
