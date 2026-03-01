@@ -1,10 +1,10 @@
 import React, { useState } from 'react';
-import { Plus, Scan, Trash2, Package, AlertCircle, ChefHat, Clock, Users, Leaf, Share2, Bell, BookOpen, LogOut, CheckCircle, XCircle, Send, Eye, Target, Flag, } from 'lucide-react';
+import { Plus, Scan, Trash2, Package, AlertCircle, ChefHat, Clock, Users, Leaf, Share2, Bell, BookOpen, LogOut, CheckCircle, XCircle, Send, Eye, Target, Flag } from 'lucide-react';
 
 // ─── MOCK USERS ───────────────────────────────────────────────────────────────
 const MOCK_USERS = [
-  { id: 1, name: 'Rachel Salandy',   email: 'rachel@example.com', password: 'pass123', role: 'user' },
-  { id: 2, name: 'Dr. Sarah Doe', email: 'dr.doe@hna.tt',  password: 'hnatt123', role: 'nutritionist' },
+  { id: 1, name: 'Rachel Salandy', email: 'rachel@example.com', password: 'pass123', role: 'user' },
+  { id: 2, name: 'Dr. Sarah Doe',  email: 'dr.doe@hnatt.tt',    password: 'hnatt123', role: 'dietitian' },
 ];
 
 // ─── MOCK PATIENT RECORDS ─────────────────────────────────────────────────────
@@ -143,6 +143,9 @@ function expiryStatus(days) {
   return           { label: days + 'd left',      cls: 'bg-green-100 text-green-800 border-green-200' };
 }
 
+// ═════════════════════════════════════════════════════════════════════════════
+// AUTH SCREEN
+// ═════════════════════════════════════════════════════════════════════════════
 function AuthScreen({ onLogin }) {
   const [mode, setMode]   = useState('login');
   const [email, setEmail] = useState('');
@@ -190,7 +193,7 @@ function AuthScreen({ onLogin }) {
                 <select value={role} onChange={e=>setRole(e.target.value)}
                   className="mt-1 w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500">
                   <option value="user">Household User</option>
-                  <option value="nutritionist">Nutritionist / Healthcare Provider</option>
+                  <option value="dietitian">Dietitian / Healthcare Provider</option>
                 </select>
               </div>
             </>
@@ -215,13 +218,16 @@ function AuthScreen({ onLogin }) {
   );
 }
 
-function NutritionistDashboard({ currentUser, sharedProfiles, onLogout }) {
-  const [selected, setSelected]             = useState(null);
-  const [panel, setPanel]                   = useState('overview');
-  const [noteText, setNoteText]             = useState('');
-  const [planText, setPlanText]             = useState('');
-  const [goalText, setGoalText]             = useState('');
-  const [sent, setSent]                     = useState([
+// ═════════════════════════════════════════════════════════════════════════════
+// DIETITIAN DASHBOARD
+// ═════════════════════════════════════════════════════════════════════════════
+function DietitianDashboard({ currentUser, sharedProfiles, onLogout }) {
+  const [selected, setSelected]               = useState(null);
+  const [panel, setPanel]                     = useState('overview');
+  const [noteText, setNoteText]               = useState('');
+  const [planText, setPlanText]               = useState('');
+  const [goalText, setGoalText]               = useState('');
+  const [sent, setSent]                       = useState([
     { id: 1, to: 1, type: 'mealplan', body: 'Monday: Pelau with steamed vegetables\nTuesday: Callaloo soup + whole grain bread\nWednesday: Grilled fish + provision\nThursday: Stew chicken & rice\nFriday: Vegetable stir-fry', time: 'Earlier today' },
     { id: 2, to: 1, type: 'note', body: 'Great progress this week Rachel! Keep an eye on the chicken, it expires Friday.', time: 'Yesterday' },
   ]);
@@ -269,21 +275,21 @@ function NutritionistDashboard({ currentUser, sharedProfiles, onLogout }) {
   const flags = selected ? getFlags(selected) : [];
 
   const patientStats = selected ? (() => {
-    const wasted  = selected.wasteLog.filter(e => e.action === 'wasted').length;
-    const used    = selected.wasteLog.filter(e => e.action === 'used').length;
-    const total   = wasted + used;
+    const wasted   = selected.wasteLog.filter(e => e.action === 'wasted').length;
+    const used     = selected.wasteLog.filter(e => e.action === 'used').length;
+    const total    = wasted + used;
     const saveRate = total > 0 ? Math.round(used / total * 100) : null;
     return { wasted, used, total, saveRate };
   })() : null;
 
   const panelTabs = [
-    ['overview', 'Overview', 'A'],
-    ['clinical', 'Clinical', 'C'],
-    ['remind',   'Reminder', 'R'],
-    ['mealplan', 'Meal Plan','M'],
-    ['goals',    'Goals',    'G'],
-    ['recipes',  'Recipes',  'Rx'],
-    ['history',  'History',  'H'],
+    ['overview', 'Overview'],
+    ['clinical', 'Clinical'],
+    ['remind',   'Reminder'],
+    ['mealplan', 'Meal Plan'],
+    ['goals',    'Goals'],
+    ['recipes',  'Recipes'],
+    ['history',  'History'],
   ];
 
   return (
@@ -292,8 +298,8 @@ function NutritionistDashboard({ currentUser, sharedProfiles, onLogout }) {
 
         <div className="bg-white rounded-2xl shadow-lg p-5 mb-6 flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-gray-800">Nutritionist Portal</h1>
-            <p className="text-gray-500 text-sm">Welcome, {currentUser.name} - Health and Nutrition Association of Trinidad & Tobago</p>
+            <h1 className="text-2xl font-bold text-gray-800">Dietitian Portal</h1>
+            <p className="text-gray-500 text-sm">Welcome, {currentUser.name} · Health and Nutrition Association of Trinidad & Tobago</p>
           </div>
           <div className="flex items-center gap-4">
             <div className="text-right">
@@ -319,7 +325,7 @@ function NutritionistDashboard({ currentUser, sharedProfiles, onLogout }) {
               <div className="bg-white rounded-2xl shadow-lg p-4">
                 <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Active Patients</p>
                 {sharedProfiles.map(p => {
-                  const pFlags = getFlags(p);
+                  const pFlags  = getFlags(p);
                   const pWasted = p.wasteLog.filter(e => e.action === 'wasted').length;
                   const pTotal  = p.wasteLog.length;
                   const pWasteRate = pTotal > 0 ? Math.round(pWasted / pTotal * 100) : 0;
@@ -564,7 +570,7 @@ function NutritionistDashboard({ currentUser, sharedProfiles, onLogout }) {
                         <div className="space-y-3 max-h-72 overflow-y-auto">
                           {ALL_RECIPES.map(recipe => {
                             const pNames = selected.items.map(i => i.name.toLowerCase());
-                            const avail = [...pNames, ...STAPLES];
+                            const avail  = [...pNames, ...STAPLES];
                             const missing = recipe.requiredItems.filter(req => !avail.some(p => p.includes(req.toLowerCase()) || req.toLowerCase().includes(p)));
                             const canMake = missing.length === 0;
                             return (
@@ -594,17 +600,18 @@ function NutritionistDashboard({ currentUser, sharedProfiles, onLogout }) {
                         ) : (
                           <div className="space-y-3 max-h-96 overflow-y-auto">
                             {[...sentForSelected].reverse().map(m => {
-                              const styles = {
+                              const styleMap = {
                                 note:     'bg-yellow-50 border-yellow-200 text-yellow-600',
                                 mealplan: 'bg-blue-50 border-blue-200 text-blue-600',
                                 goal:     'bg-purple-50 border-purple-200 text-purple-600',
                               };
-                              const labels = { note: 'Reminder', mealplan: 'Meal Plan', goal: 'Goal' };
-                              const s = styles[m.type] || 'bg-green-50 border-green-200 text-green-600';
+                              const labelMap = { note: 'Reminder', mealplan: 'Meal Plan', goal: 'Goal' };
+                              const s = styleMap[m.type] || 'bg-green-50 border-green-200 text-green-600';
+                              const parts = s.split(' ');
                               return (
-                                <div key={m.id} className={'p-3 rounded-xl text-sm border ' + s.split(' ').slice(0,2).join(' ')}>
+                                <div key={m.id} className={'p-3 rounded-xl text-sm border ' + parts[0] + ' ' + parts[1]}>
                                   <div className="flex items-center justify-between mb-1.5">
-                                    <span className={'text-xs font-bold uppercase tracking-wide ' + s.split(' ')[2]}>{labels[m.type] || 'Message'}</span>
+                                    <span className={'text-xs font-bold uppercase tracking-wide ' + parts[2]}>{labelMap[m.type] || 'Message'}</span>
                                     <span className="text-xs text-gray-400">{m.time}</span>
                                   </div>
                                   <p className="text-gray-700 whitespace-pre-line text-xs leading-relaxed">{m.body}</p>
@@ -632,6 +639,9 @@ function NutritionistDashboard({ currentUser, sharedProfiles, onLogout }) {
   );
 }
 
+// ═════════════════════════════════════════════════════════════════════════════
+// MAIN USER APP
+// ═════════════════════════════════════════════════════════════════════════════
 export default function PantryMate() {
   const [currentUser, setCurrentUser]       = useState(null);
   const [sharedProfiles, setSharedProfiles] = useState([]);
@@ -645,17 +655,17 @@ export default function PantryMate() {
     { id:5, name:'Rice',    category:'Pantry', quantity:1,  unit:'bag',    expiryDate:'2026-12-01', addedDate:'2026-02-10' },
   ]);
 
-  const [wasteLog, setWasteLog]           = useState([]);
-  const [pendingDelete, setPendingDelete] = useState(null);
-  const [showAddForm, setShowAddForm]     = useState(false);
-  const [newItem, setNewItem]             = useState({ name:'', category:'Other', quantity:1, unit:'item', expiryDate:'' });
+  const [wasteLog, setWasteLog]             = useState([]);
+  const [pendingDelete, setPendingDelete]   = useState(null);
+  const [showAddForm, setShowAddForm]       = useState(false);
+  const [newItem, setNewItem]               = useState({ name:'', category:'Other', quantity:1, unit:'item', expiryDate:'' });
   const [selectedRecipe, setSelectedRecipe] = useState(null);
-  const [servings, setServings]           = useState({});
-  const [dietFilter, setDietFilter]       = useState([]);
-  const [showExpiring, setShowExpiring]   = useState(false);
-  const [sharingOn, setSharingOn]         = useState(false);
-  const [scanIdx, setScanIdx]             = useState(0);
-  const [inboxMessages, setInboxMessages] = useState([]);
+  const [servings, setServings]             = useState({});
+  const [dietFilter, setDietFilter]         = useState([]);
+  const [showExpiring, setShowExpiring]     = useState(false);
+  const [sharingOn, setSharingOn]           = useState(false);
+  const [scanIdx, setScanIdx]               = useState(0);
+  const [inboxMessages, setInboxMessages]   = useState([]);
 
   const login = (user) => {
     setCurrentUser(user);
@@ -693,8 +703,8 @@ export default function PantryMate() {
   const requestDelete = (item) => setPendingDelete(item);
   const confirmDelete = (action) => {
     if (!pendingDelete) return;
-    const entry    = { id: Date.now(), itemName: pendingDelete.name, action, date: TODAY.toISOString().split('T')[0] };
-    const nextLog  = [...wasteLog, entry];
+    const entry     = { id: Date.now(), itemName: pendingDelete.name, action, date: TODAY.toISOString().split('T')[0] };
+    const nextLog   = [...wasteLog, entry];
     const nextItems = items.filter(i => i.id !== pendingDelete.id);
     setWasteLog(nextLog);
     setItems(nextItems);
@@ -762,8 +772,8 @@ export default function PantryMate() {
   const UNITS = ['item','count','lb','kg','oz','g','bottle','carton','loaf','bag','can'];
 
   if (!currentUser) return <AuthScreen onLogin={login} />;
-  if (currentUser.role === 'nutritionist')
-    return <NutritionistDashboard currentUser={currentUser} sharedProfiles={sharedProfiles} onLogout={logout} />;
+  if (currentUser.role === 'dietitian')
+    return <DietitianDashboard currentUser={currentUser} sharedProfiles={sharedProfiles} onLogout={logout} />;
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-green-50 to-blue-50 p-4">
@@ -807,7 +817,7 @@ export default function PantryMate() {
           {sharingOn && (
             <div className="flex items-start gap-2 bg-blue-50 border border-blue-200 rounded-xl p-3 mb-4 text-sm text-blue-700">
               <Eye size={15} className="mt-0.5 shrink-0"/>
-              Your pantry and waste log are visible to your nutritionist.
+              Your pantry and waste log are visible to your dietitian.
             </div>
           )}
 
@@ -828,9 +838,9 @@ export default function PantryMate() {
 
           <div className="flex gap-2 mb-4">
             {[
-              ['pantry',  'Pantry',                          <Package size={16}/>],
+              ['pantry',  'Pantry',                                  <Package size={16}/>],
               ['recipes', 'Recipes (' + matchedRecipes.length + ')', <ChefHat size={16}/>],
-              ['stats',   'My Stats',                        <Leaf size={16}/>],
+              ['stats',   'My Stats',                                <Leaf size={16}/>],
             ].map(([tab,lbl,icon]) => (
               <button key={tab} onClick={()=>setActiveTab(tab)}
                 className={'flex-1 py-2.5 px-2 rounded-xl text-sm font-semibold transition-all flex items-center justify-center gap-1.5 ' + (activeTab===tab?'bg-gradient-to-r from-green-500 to-green-600 text-white shadow-lg':'bg-gray-100 text-gray-600 hover:bg-gray-200')}>
@@ -1001,7 +1011,6 @@ export default function PantryMate() {
                           <span className="bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full text-xs">{recipe.difficulty}</span>
                         </div>
                       </div>
-
                       {!recipe.canMake && (
                         <div className="mb-2 p-2 bg-white rounded-lg border border-orange-200">
                           <p className="text-xs text-orange-700 font-semibold mb-1">Missing:</p>
@@ -1010,23 +1019,19 @@ export default function PantryMate() {
                           </div>
                         </div>
                       )}
-
                       <div className="flex items-center gap-3 text-xs text-gray-500 mb-3">
                         <span className="flex items-center gap-1"><Clock size={12}/>{recipe.prepTime} min</span>
                         <span className="flex items-center gap-1"><Leaf size={12}/>{recipe.calories} cal</span>
                       </div>
-
                       <div className="srv flex items-center gap-2 mb-3" onClick={e=>e.stopPropagation()}>
                         <span className="text-xs text-gray-500">Servings:</span>
                         <button onClick={()=>setServings(p=>({...p,[recipe.id]:Math.max(1,(p[recipe.id]||1)-1)}))} className="w-7 h-7 bg-gray-200 rounded-lg font-bold text-sm hover:bg-gray-300">-</button>
                         <span className="font-semibold text-sm text-gray-800 min-w-8 text-center">{srvCount}</span>
                         <button onClick={()=>setServings(p=>({...p,[recipe.id]:Math.min(10,(p[recipe.id]||1)+1)}))} className="w-7 h-7 bg-gray-200 rounded-lg font-bold text-sm hover:bg-gray-300">+</button>
                       </div>
-
                       <div className="flex flex-wrap gap-1 mb-1">
                         {recipe.healthBenefits.map((b,i)=><span key={i} className="bg-blue-50 text-blue-700 px-2 py-0.5 rounded text-xs">{b}</span>)}
                       </div>
-
                       {selectedRecipe===recipe.id && (
                         <div className="mt-4 pt-4 border-t border-gray-200">
                           <p className="font-semibold text-gray-800 mb-2 text-sm">Ingredients ({srvCount} serving{srvCount>1?'s':''}):</p>
@@ -1102,8 +1107,8 @@ export default function PantryMate() {
             <div className="bg-white rounded-2xl shadow-lg p-6">
               <div className="flex items-center justify-between mb-2">
                 <div>
-                  <h3 className="font-bold text-gray-800">Share with Nutritionist</h3>
-                  <p className="text-xs text-gray-500 mt-0.5">Allow your nutritionist to view your pantry and waste data</p>
+                  <h3 className="font-bold text-gray-800">Share with Your Dietitian</h3>
+                  <p className="text-xs text-gray-500 mt-0.5">Allow your dietitian to view your pantry and waste data</p>
                 </div>
                 <button onClick={toggleSharing}
                   className={'relative w-14 h-7 rounded-full transition-colors duration-200 ' + (sharingOn?'bg-green-500':'bg-gray-300')}>
@@ -1111,7 +1116,7 @@ export default function PantryMate() {
                 </button>
               </div>
               {sharingOn
-                ? <p className="text-green-700 text-xs bg-green-50 border border-green-200 rounded-lg p-3">Active - your nutritionist can see your pantry and waste activity in real time.</p>
+                ? <p className="text-green-700 text-xs bg-green-50 border border-green-200 rounded-lg p-3">Active - your dietitian can see your pantry and waste activity in real time.</p>
                 : <p className="text-gray-400 text-xs">Off - only you can see your data.</p>
               }
             </div>
