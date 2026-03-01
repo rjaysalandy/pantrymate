@@ -4,7 +4,7 @@ import { Plus, Scan, Trash2, Package, AlertCircle, ChefHat, Clock, Users, Leaf, 
 // ─── MOCK USERS ───────────────────────────────────────────────────────────────
 const MOCK_USERS = [
   { id: 1, name: 'Rachel Salandy',   email: 'rachel@example.com', password: 'pass123', role: 'user' },
-  { id: 2, name: 'Dr. Maria Joseph', email: 'dr.joseph@ttan.tt',  password: 'ttan123', role: 'nutritionist' },
+  { id: 2, name: 'Dr. Sarah Doe', email: 'dr.doe@hna.tt',  password: 'hnatt123', role: 'nutritionist' },
 ];
 
 // ─── MOCK PATIENT RECORDS ─────────────────────────────────────────────────────
@@ -293,7 +293,7 @@ function NutritionistDashboard({ currentUser, sharedProfiles, onLogout }) {
         <div className="bg-white rounded-2xl shadow-lg p-5 mb-6 flex items-center justify-between">
           <div>
             <h1 className="text-2xl font-bold text-gray-800">Nutritionist Portal</h1>
-            <p className="text-gray-500 text-sm">Welcome, {currentUser.name} - T&T Association of Nutritionists</p>
+            <p className="text-gray-500 text-sm">Welcome, {currentUser.name} - Health and Nutrition Association of Trinidad & Tobago</p>
           </div>
           <div className="flex items-center gap-4">
             <div className="text-right">
@@ -661,7 +661,7 @@ export default function PantryMate() {
     setCurrentUser(user);
     if (user.role === 'user') {
       setInboxMessages([{
-        id: 1, type: 'mealplan', from: 'Dr. Maria Joseph',
+        id: 1, type: 'mealplan', from: 'Dr. Sarah Doe',
         body: 'Monday: Pelau with steamed vegetables\nTuesday: Callaloo soup + whole grain bread\nWednesday: Grilled fish + provision\nThursday: Stew chicken & rice\nFriday: Vegetable stir-fry',
         time: 'Earlier today',
       }]);
