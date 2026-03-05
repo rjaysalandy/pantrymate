@@ -4,7 +4,7 @@ import { Plus, Scan, Trash2, Package, AlertCircle, ChefHat, Clock, Users, Leaf, 
 // ─── MOCK USERS ───────────────────────────────────────────────────────────────
 const MOCK_USERS = [
   { id: 1, name: 'Rachel Salandy', email: 'rachel@example.com', password: 'pass123', role: 'user' },
-  { id: 2, name: 'Dr. Sarah Doe',  email: 'dr.doe@hnatt.tt',    password: 'hnatt123', role: 'dietitian' },
+  { id: 2, name: 'Dr. Sarah Doe',  email: 'dr.doe@dietitian.tt',    password: 'dietitian123', role: 'dietitian' },
 ];
 
 // ─── MOCK PATIENT RECORDS ─────────────────────────────────────────────────────
@@ -299,7 +299,7 @@ function DietitianDashboard({ currentUser, sharedProfiles, onLogout }) {
         <div className="bg-white rounded-2xl shadow-lg p-5 mb-6 flex items-center justify-between">
           <div>
             <h1 className="text-2xl font-bold text-gray-800">Dietitian Portal</h1>
-            <p className="text-gray-500 text-sm">Welcome, {currentUser.name} · Health and Nutrition Association of Trinidad & Tobago</p>
+            <p className="text-gray-500 text-sm">Welcome, {currentUser.name} · Dietitian Portal</p>
           </div>
           <div className="flex items-center gap-4">
             <div className="text-right">
