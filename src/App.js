@@ -141,7 +141,7 @@ function AuthScreen({ onLogin }) {
           </div>
           <div>
             <label className="text-sm font-medium text-gray-700">Password</label>
-            <input type="password" value={pass} onChange={e=>setPass(e.target.value)} placeholder="••••••••"
+            <input type="password" value={pass} onChange={e=>setPass(e.target.value)} onKeyDown={e=>e.key==='Enter'&&submit()} placeholder="••••••••"
               className="mt-1 w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"/>
           </div>
           <button onClick={submit}
