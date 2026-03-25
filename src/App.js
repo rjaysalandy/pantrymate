@@ -617,6 +617,28 @@ export default function PantryMate() {
     }
   };
 
+  const fetchSharingStatus = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch(`${API}/api/sharing/status`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      const data = await res.json();
+      if (res.ok) setSharingOn(data.sharing_enabled === 1);
+    } catch (err) { console.error('Failed to fetch sharing status:', err); }
+  };
+
+  const fetchSharedPatients = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch(`${API}/api/sharing/patients`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      const data = await res.json();
+      if (res.ok) setSharedProfiles(data);
+    } catch (err) { console.error('Failed to fetch patients:', err); }
+  };
+
   const login = async (user) => {
     setCurrentUser(user);
     await fetchRecipes();
@@ -624,6 +646,9 @@ export default function PantryMate() {
       setInboxMessages([]);
       await fetchPantry();
       await fetchWasteLog();
+      await fetchSharingStatus();
+    } else {
+      await fetchSharedPatients();
     }
   };
 
@@ -636,17 +661,17 @@ export default function PantryMate() {
     localStorage.removeItem('token');
   };
 
-  const toggleSharing = () => {
-    if (!sharingOn) {
-      setSharedProfiles(prev => {
-        const others = prev.filter(p => p.userId !== currentUser.id);
-        return [...others, { userId: currentUser.id, name: currentUser.name, items, wasteLog }];
+  const toggleSharing = async () => {
+    const newState = !sharingOn;
+    setSharingOn(newState);
+    try {
+      const token = localStorage.getItem('token');
+      await fetch(`${API}/api/sharing/toggle`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ enabled: newState })
       });
-      setSharingOn(true);
-    } else {
-      setSharedProfiles(prev => prev.filter(p => p.userId !== currentUser.id));
-      setSharingOn(false);
-    }
+    } catch (err) { console.error('Failed to save sharing:', err); }
   };
 
   const requestDelete = (item) => setPendingDelete(item);
