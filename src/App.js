@@ -619,11 +619,11 @@ export default function PantryMate() {
 
   const login = async (user) => {
     setCurrentUser(user);
+    await fetchRecipes();
     if (user.role === 'user') {
       setInboxMessages([]);
       await fetchPantry();
       await fetchWasteLog();
-      await fetchRecipes();
     }
   };
 
