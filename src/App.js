@@ -129,7 +129,7 @@ function AuthScreen({ onLogin }) {
                 <select value={role} onChange={e=>setRole(e.target.value)}
                   className="mt-1 w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500">
                   <option value="user">Household User</option>
-                  <option value="dietitian">Dietitian / Healthcare Provider</option>
+                  <option value="dietician">Dietitian / Healthcare Provider</option>
                 </select>
               </div>
             </>
@@ -717,7 +717,7 @@ export default function PantryMate() {
   const UNITS = ['item','count','lb','kg','oz','g','bottle','carton','loaf','bag','can'];
 
   if (!currentUser) return <AuthScreen onLogin={login}/>;
-  if (currentUser.role === 'dietitian')
+  if (currentUser.role === 'dietician')
     return <DietitianDashboard currentUser={currentUser} sharedProfiles={sharedProfiles} onLogout={logout} dbRecipes={dbRecipes}/>;
 
   return (
