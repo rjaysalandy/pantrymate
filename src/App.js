@@ -1,1090 +1,1408 @@
-import React, { useState } from 'react';
-import { Plus, Scan, Trash2, Package, AlertCircle, ChefHat, Clock, Users, Leaf, Share2, Bell, BookOpen, LogOut, CheckCircle, XCircle, Send, Eye, Target, Flag } from 'lucide-react';
+import React, { useState, useEffect, useCallback } from 'react';
+import './App.css';
 
-const MOCK_PATIENT_RECORDS = {
-  1: {
-    dob: '1998-05-14', phone: '868-555-0101', address: 'Chaguanas, Trinidad',
-    diagnosis: ['Type 2 Diabetes (pre-diabetic)', 'Overweight (BMI 27.4)'],
-    allergies: ['Shellfish'], dietaryRestrictions: ['Low sugar', 'Reduced sodium'],
-    currentGoal: 'Reduce weekly food waste to under 2 items and cook at home 4x per week',
-    goalTarget: 2, nextAppointment: '2026-03-10',
-    notes: 'Patient is motivated and engaged. Responds well to positive reinforcement.',
-    joinedDate: '2026-01-15',
-  },
-};
+const API = process.env.REACT_APP_API_URL || 'http://localhost:8080';
 
-const STAPLES = ['salt','pepper','sugar','oil','olive oil','garlic','onion','butter','green seasoning','browning'];
-
-const DEMO_SCAN_QUEUE = [
-  { name: 'Rolled Oats',      category: 'Pantry', quantity: 1, unit: 'bag',       expiry_date: '2026-12-01' },
-  { name: 'Low Fat Milk',     category: 'Dairy',  quantity: 1, unit: 'carton',    expiry_date: '2026-04-05' },
-  { name: 'Canned Chickpeas', category: 'Pantry', quantity: 1, unit: 'can',       expiry_date: '2027-06-01' },
-  { name: 'Greek Yogurt',     category: 'Dairy',  quantity: 1, unit: 'container', expiry_date: '2026-04-10' },
-  { name: 'Brown Rice',       category: 'Pantry', quantity: 1, unit: 'bag',       expiry_date: '2026-12-01' },
-  { name: 'Canned Tuna',      category: 'Pantry', quantity: 1, unit: 'can',       expiry_date: '2027-01-01' },
-];
-
-const API = process.env.REACT_APP_API_URL;
-
-function getDateStr(item) {
-  return item.expiry_date || item.expiryDate || '';
+// ─── Helpers ───────────────────────────────────────────────────────────────
+function daysLeft(dateStr) {
+  if (!dateStr) return null;
+  const diff = Math.ceil((new Date(dateStr) - new Date()) / 86400000);
+  return diff;
+}
+function expiryBadge(dateStr) {
+  const d = daysLeft(dateStr);
+  if (d === null) return null;
+  if (d < 0)  return { label: 'Expired',      color: 'bg-red-100 text-red-700' };
+  if (d === 0) return { label: 'Expires today', color: 'bg-red-100 text-red-700' };
+  if (d <= 2)  return { label: `${d}d left`,   color: 'bg-amber-100 text-amber-700' };
+  if (d <= 5)  return { label: `${d}d left`,   color: 'bg-yellow-100 text-yellow-700' };
+  return { label: `${d}d left`, color: 'bg-green-100 text-green-700' };
+}
+function greeting() {
+  const h = new Date().getHours();
+  if (h < 12) return 'Good morning';
+  if (h < 17) return 'Good afternoon';
+  if (h < 21) return 'Good evening';
+  return 'Good night';
+}
+function mealTimeLabel() {
+  const h = new Date().getHours();
+  if (h < 11) return 'breakfast';
+  if (h < 14) return 'lunch';
+  if (h < 17) return 'snack';
+  if (h < 21) return 'dinner';
+  return 'snack';
+}
+function token() { return localStorage.getItem('token'); }
+function authHeaders() {
+  return { 'Content-Type': 'application/json', Authorization: `Bearer ${token()}` };
 }
 
-function daysUntil(dateStr) {
-  if (!dateStr) return 999;
-  const clean = String(dateStr).split('T')[0];
-  const date  = new Date(clean + 'T00:00:00');
-  if (isNaN(date.getTime())) return 999;
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  return Math.ceil((date - today) / 86400000);
-}
-
-function expiryStatus(days) {
-  if (days < 0)  return { label: 'Expired',      cls: 'bg-red-100 text-red-800 border-red-200' };
-  if (days <= 3) return { label: days + 'd left', cls: 'bg-orange-100 text-orange-800 border-orange-200' };
-  if (days <= 7) return { label: days + 'd left', cls: 'bg-yellow-100 text-yellow-800 border-yellow-200' };
-  return           { label: days + 'd left',      cls: 'bg-green-100 text-green-800 border-green-200' };
-}
-
-function formatDate(dateStr) {
-  if (!dateStr) return 'Unknown';
-  const clean = String(dateStr).split('T')[0];
-  const date  = new Date(clean + 'T00:00:00');
-  if (isNaN(date.getTime())) return 'Unknown';
-  return date.toLocaleDateString();
-}
-
-// ═══════════════════════════════════════════════════════════════════════
-// AUTH SCREEN
-// ═══════════════════════════════════════════════════════════════════════
+// ─── Auth Screen ────────────────────────────────────────────────────────────
 function AuthScreen({ onLogin }) {
-  const [mode, setMode]   = useState('login');
-  const [email, setEmail] = useState('');
-  const [pass, setPass]   = useState('');
-  const [name, setName]   = useState('');
-  const [role, setRole]   = useState('user');
-  const [error, setError] = useState('');
+  const [mode, setMode]       = useState('login');
+  const [name, setName]       = useState('');
+  const [email, setEmail]     = useState('');
+  const [pass, setPass]       = useState('');
+  const [role, setRole]       = useState('user');
+  const [error, setError]     = useState('');
+  const [loading, setLoading] = useState(false);
 
   const submit = async () => {
-    setError('');
-    if (mode === 'login') {
-      try {
-        const res  = await fetch(`${API}/api/auth/login`, {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email, password: pass })
-        });
-        const data = await res.json();
-        if (!res.ok) return setError(data.error || 'Login failed');
-        localStorage.setItem('token', data.token);
-        onLogin(data.user);
-      } catch { setError('Cannot connect to server. Please try again.'); }
-    } else {
-      if (!name || !email || !pass) return setError('Please fill in all fields.');
-      try {
-        const res = await fetch(`${API}/api/auth/register`, {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ name, email, password: pass, role })
-        });
-        const data = await res.json();
-        if (!res.ok) return setError(data.error || 'Registration failed');
-        const loginRes  = await fetch(`${API}/api/auth/login`, {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email, password: pass })
-        });
-        const loginData = await loginRes.json();
-        if (!loginRes.ok) return setError('Registered but login failed. Please sign in.');
-        localStorage.setItem('token', loginData.token);
-        onLogin(loginData.user);
-      } catch { setError('Cannot connect to server. Please try again.'); }
-    }
+    setError(''); setLoading(true);
+    try {
+      const body = mode === 'login'
+        ? { email, password: pass }
+        : { name, email, password: pass, role };
+      const res  = await fetch(`${API}/api/auth/${mode === 'login' ? 'login' : 'register'}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      });
+      const data = await res.json();
+      if (!res.ok) { setError(data.error || 'Something went wrong'); return; }
+      localStorage.setItem('token', data.token);
+      onLogin(data);
+    } catch (e) { setError('Cannot connect to server. Is the backend running?'); }
+    finally { setLoading(false); }
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-green-50 to-blue-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl shadow-xl p-8 w-full max-w-md">
-        <div className="text-center mb-6">
-          <h1 className="text-3xl font-bold text-gray-800">WasteLess PantryMate</h1>
+    <div className="min-h-screen bg-gradient-to-br from-green-50 to-emerald-100 flex items-center justify-center p-4">
+      <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-8">
+        <div className="text-center mb-8">
+          <div className="w-16 h-16 bg-green-500 rounded-2xl flex items-center justify-center mx-auto mb-4">
+            <span className="text-white text-2xl">🥦</span>
+          </div>
+          <h1 className="text-2xl font-bold text-gray-800">WasteLess PantryMate</h1>
           <p className="text-gray-500 text-sm mt-1">Smart food management for T&T households</p>
         </div>
-        <div className="flex gap-2 mb-6">
+
+        <div className="flex bg-gray-100 rounded-xl p-1 mb-6">
           {['login','register'].map(m => (
-            <button key={m} onClick={() => { setMode(m); setError(''); }}
-              className={'flex-1 py-2 rounded-xl font-semibold text-sm transition-all ' + (mode===m?'bg-green-500 text-white shadow':'bg-gray-100 text-gray-600 hover:bg-gray-200')}>
-              {m==='login'?'Sign In':'Create Account'}
+            <button key={m} onClick={() => setMode(m)}
+              className={`flex-1 py-2 rounded-lg text-sm font-medium transition-all ${mode === m ? 'bg-white shadow text-green-600' : 'text-gray-500'}`}>
+              {m === 'login' ? 'Sign In' : 'Create Account'}
             </button>
           ))}
         </div>
-        {error && <p className="text-red-500 text-sm mb-4 bg-red-50 p-3 rounded-lg">{error}</p>}
-        <div className="space-y-4">
-          {mode==='register' && (
-            <>
-              <div>
-                <label className="text-sm font-medium text-gray-700">Full Name</label>
-                <input value={name} onChange={e=>setName(e.target.value)} placeholder="Your name"
-                  className="mt-1 w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"/>
-              </div>
-              <div>
-                <label className="text-sm font-medium text-gray-700">I am a</label>
-                <select value={role} onChange={e=>setRole(e.target.value)}
-                  className="mt-1 w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500">
-                  <option value="user">Household User</option>
-                  <option value="dietician">Dietitian / Healthcare Provider</option>
-                </select>
-              </div>
-            </>
-          )}
-          <div>
-            <label className="text-sm font-medium text-gray-700">Email</label>
-            <input type="email" value={email} onChange={e=>setEmail(e.target.value)} placeholder="you@example.com"
-              className="mt-1 w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"/>
+
+        {mode === 'register' && (
+          <div className="mb-4">
+            <label className="text-sm font-medium text-gray-700">Full name</label>
+            <input value={name} onChange={e => setName(e.target.value)}
+              className="mt-1 w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 outline-none"
+              placeholder="Rachel Salandy" />
           </div>
-          <div>
-            <label className="text-sm font-medium text-gray-700">Password</label>
-            <input type="password" value={pass} onChange={e=>setPass(e.target.value)} onKeyDown={e=>e.key==='Enter'&&submit()} placeholder="••••••••"
-              className="mt-1 w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"/>
-          </div>
-          <button onClick={submit}
-            className="w-full bg-gradient-to-r from-green-500 to-green-600 text-white py-3 rounded-xl font-semibold shadow-lg hover:shadow-xl transition-all">
-            {mode==='login'?'Sign In':'Create Account'}
-          </button>
+        )}
+
+        <div className="mb-4">
+          <label className="text-sm font-medium text-gray-700">Email</label>
+          <input type="email" value={email} onChange={e => setEmail(e.target.value)}
+            className="mt-1 w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 outline-none"
+            placeholder="you@example.com" />
         </div>
+
+        <div className="mb-4">
+          <label className="text-sm font-medium text-gray-700">Password</label>
+          <input type="password" value={pass} onChange={e => setPass(e.target.value)}
+            onKeyDown={e => e.key === 'Enter' && submit()}
+            className="mt-1 w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 outline-none"
+            placeholder="••••••••" />
+        </div>
+
+        {mode === 'register' && (
+          <div className="mb-6">
+            <label className="text-sm font-medium text-gray-700">I am registering as</label>
+            <select value={role} onChange={e => setRole(e.target.value)}
+              className="mt-1 w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 outline-none">
+              <option value="user">Household User</option>
+              <option value="dietician">Dietitian / Healthcare Provider</option>
+            </select>
+          </div>
+        )}
+
+        {error && <p className="text-red-500 text-sm mb-4 bg-red-50 p-3 rounded-lg">{error}</p>}
+
+        <button onClick={submit} disabled={loading}
+          className="w-full bg-green-500 hover:bg-green-600 text-white py-3 rounded-xl font-semibold transition-all disabled:opacity-50">
+          {loading ? 'Please wait...' : mode === 'login' ? 'Sign In' : 'Create Account'}
+        </button>
       </div>
     </div>
   );
 }
 
-// ═══════════════════════════════════════════════════════════════════════
-// DIETITIAN DASHBOARD
-// ═══════════════════════════════════════════════════════════════════════
-function DietitianDashboard({ currentUser, sharedProfiles, onLogout, dbRecipes }) {
-  const [selected, setSelected]               = useState(null);
-  const [panel, setPanel]                     = useState('overview');
-  const [noteText, setNoteText]               = useState('');
-  const [planText, setPlanText]               = useState('');
-  const [goalText, setGoalText]               = useState('');
-  const [sent, setSent]                       = useState([]);
-  const [appointmentDate, setAppointmentDate] = useState('');
-  const [patientRecords, setPatientRecords]   = useState(MOCK_PATIENT_RECORDS);
-  const [editingNotes, setEditingNotes]       = useState(false);
-  const [clinicalNotes, setClinicalNotes]     = useState('');
+// ─── Dietitian Dashboard ─────────────────────────────────────────────────────
+function DietitianDashboard({ currentUser, onLogout, dbRecipes }) {
+  const [patients, setPatients]         = useState([]);
+  const [selected, setSelected]         = useState(null);
+  const [activeTab, setActiveTab]       = useState('overview');
+  const [msgBody, setMsgBody]           = useState('');
+  const [clinicalNotes, setClinicalNotes] = useState('');
+  const [goal, setGoal]                 = useState('');
+  const [mealPlan, setMealPlan]         = useState({});
+  const [notification, setNotification] = useState('');
 
-  const sendMsg = (type, body) => {
-    const msgBody = body || (type === 'note' ? noteText : type === 'mealplan' ? planText : goalText);
+  const DAYS = ['monday','tuesday','wednesday','thursday','friday','saturday','sunday'];
+  const SLOTS = ['breakfast','lunch','dinner','snack'];
+
+  useEffect(() => { fetchPatients(); }, []);
+
+  const fetchPatients = async () => {
+    const res = await fetch(`${API}/api/sharing/patients`, { headers: authHeaders() });
+    const data = await res.json();
+    if (res.ok) { setPatients(data); if (data.length) setSelected(data[0]); }
+  };
+
+  const notify = (msg) => { setNotification(msg); setTimeout(() => setNotification(''), 3000); };
+
+  const sendMessage = async () => {
     if (!msgBody.trim() || !selected) return;
-    setSent(s => [...s, { id: Date.now(), to: selected.userId, type, body: msgBody, time: 'Just now' }]);
-    if (type === 'note') setNoteText('');
-    if (type === 'mealplan') setPlanText('');
-    if (type === 'goal') setGoalText('');
+    await fetch(`${API}/api/messages`, {
+      method: 'POST', headers: authHeaders(),
+      body: JSON.stringify({ toUserId: selected.userId, body: msgBody, type: 'reminder' })
+    });
+    setMsgBody(''); notify('Message sent!');
   };
 
-  const saveAppointment = () => {
-    if (!appointmentDate || !selected) return;
-    setPatientRecords(r => ({ ...r, [selected.userId]: { ...(r[selected.userId]||{}), nextAppointment: appointmentDate } }));
-    setAppointmentDate('');
-  };
-
-  const saveClinicalNotes = () => {
+  const saveRecord = async () => {
     if (!selected) return;
-    setPatientRecords(r => ({ ...r, [selected.userId]: { ...(r[selected.userId]||{}), notes: clinicalNotes } }));
-    setEditingNotes(false);
+    await fetch(`${API}/api/sharing/patient-record`, {
+      method: 'POST', headers: authHeaders(),
+      body: JSON.stringify({ userId: selected.userId, currentGoal: goal, clinicalNotes })
+    });
+    notify('Record saved!');
   };
 
-  const getFlags = (profile) => {
-    const flags       = [];
-    const wastedCount = profile.wasteLog.filter(e => e.action==='wasted').length;
-    const usedCount   = profile.wasteLog.filter(e => e.action==='used').length;
-    const total       = wastedCount + usedCount;
-    const wasteRate   = total > 0 ? Math.round(wastedCount/total*100) : 0;
-    const expiring    = profile.items.filter(i => { const d=daysUntil(getDateStr(i)); return d>=0&&d<=3; });
-    if (wasteRate>50&&total>0) flags.push({ type:'warning', msg:'High waste rate: '+wasteRate+'% of removed items wasted' });
-    if (expiring.length>0)     flags.push({ type:'alert',   msg:expiring.length+' item(s) expiring within 3 days' });
-    if (profile.items.length===0) flags.push({ type:'info', msg:'Pantry is empty - patient may need support with shopping' });
-    return flags;
+  const pushMealPlan = async () => {
+    if (!selected) return;
+    await fetch(`${API}/api/mealplanner/push`, {
+      method: 'POST', headers: authHeaders(),
+      body: JSON.stringify({ patientId: selected.userId, planData: mealPlan })
+    });
+    notify('Meal plan pushed to patient!');
   };
 
-  const record          = selected ? (patientRecords[selected.userId]||{}) : null;
-  const sentForSelected = selected ? sent.filter(m => m.to===selected.userId) : [];
-  const flags           = selected ? getFlags(selected) : [];
-  const patientStats    = selected ? (() => {
-    const wasted   = selected.wasteLog.filter(e => e.action==='wasted').length;
-    const used     = selected.wasteLog.filter(e => e.action==='used').length;
-    const total    = wasted + used;
-    const saveRate = total > 0 ? Math.round(used/total*100) : null;
-    return { wasted, used, total, saveRate };
-  })() : null;
-
-  const panelTabs = [
-    ['overview','Overview'],['clinical','Clinical'],['remind','Reminder'],
-    ['mealplan','Meal Plan'],['goals','Goals'],['recipes','Recipes'],['history','History'],
-  ];
+  const saveRate = (p) => {
+    if (!p) return 0;
+    const total = p.wasteLog?.length || 0;
+    const used  = p.wasteLog?.filter(w => w.action === 'used').length || 0;
+    return total > 0 ? Math.round((used / total) * 100) : 0;
+  };
 
   const recipes = dbRecipes || [];
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-purple-50 p-4">
-      <div className="max-w-6xl mx-auto">
-        <div className="bg-white rounded-2xl shadow-lg p-5 mb-6 flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-800">Dietitian Portal</h1>
-            <p className="text-gray-500 text-sm">Welcome, {currentUser.name} · Dietitian Portal</p>
-          </div>
-          <div className="flex items-center gap-4">
-            <div className="text-right">
-              <p className="text-gray-500 text-xs">Patients sharing</p>
-              <p className="text-2xl font-bold text-blue-600">{sharedProfiles.length}</p>
-            </div>
-            <button onClick={onLogout} className="flex items-center gap-2 text-gray-400 hover:text-red-500 transition-colors text-sm">
-              <LogOut size={16}/> Sign Out
+    <div className="min-h-screen bg-gray-50">
+      {notification && (
+        <div className="fixed top-4 right-4 bg-green-500 text-white px-6 py-3 rounded-xl shadow-lg z-50">
+          {notification}
+        </div>
+      )}
+      <div className="bg-white border-b px-6 py-4 flex justify-between items-center">
+        <div>
+          <h1 className="text-lg font-bold text-gray-800">Dietitian Portal</h1>
+          <p className="text-sm text-gray-500">Welcome, {currentUser.name}</p>
+        </div>
+        <button onClick={onLogout} className="text-sm text-gray-500 hover:text-red-500 px-4 py-2 border rounded-lg">Sign out</button>
+      </div>
+
+      <div className="flex h-screen">
+        <div className="w-64 bg-white border-r p-4 overflow-y-auto">
+          <p className="text-xs font-semibold text-gray-400 uppercase mb-3">Patients ({patients.length})</p>
+          {patients.length === 0 && <p className="text-sm text-gray-400">No patients sharing data yet</p>}
+          {patients.map(p => (
+            <button key={p.userId} onClick={() => { setSelected(p); setActiveTab('overview'); }}
+              className={`w-full text-left p-3 rounded-xl mb-2 transition-all ${selected?.userId === p.userId ? 'bg-green-50 border border-green-200' : 'hover:bg-gray-50'}`}>
+              <p className="font-medium text-sm text-gray-800">{p.name}</p>
+              <p className="text-xs text-gray-400">{p.items?.length || 0} pantry items · {saveRate(p)}% save rate</p>
             </button>
-          </div>
+          ))}
         </div>
 
-        {sharedProfiles.length === 0 ? (
-          <div className="bg-white rounded-2xl shadow-lg p-16 text-center text-gray-400">
-            <Users size={56} className="mx-auto mb-4 opacity-30"/>
-            <p className="font-semibold text-xl text-gray-500">No patients sharing yet</p>
-            <p className="text-sm mt-2 max-w-sm mx-auto">Patients appear here once they enable sharing from the Stats tab in their app.</p>
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-            <div className="md:col-span-1">
-              <div className="bg-white rounded-2xl shadow-lg p-4">
-                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Active Patients</p>
-                {sharedProfiles.map(p => {
-                  const pFlags     = getFlags(p);
-                  const pWasted    = p.wasteLog.filter(e=>e.action==='wasted').length;
-                  const pTotal     = p.wasteLog.length;
-                  const pWasteRate = pTotal>0 ? Math.round(pWasted/pTotal*100) : 0;
-                  const rec        = patientRecords[p.userId]||{};
-                  return (
-                    <button key={p.userId} onClick={() => { setSelected(p); setPanel('overview'); }}
-                      className={'w-full text-left p-3 rounded-xl mb-2 transition-all border '+(selected?.userId===p.userId?'bg-blue-600 text-white border-blue-600':'bg-gray-50 hover:bg-gray-100 text-gray-700 border-transparent')}>
-                      <div className="flex items-center justify-between mb-1">
-                        <p className="font-semibold text-sm">{p.name}</p>
-                        {pFlags.length>0 && <Flag size={12} className={selected?.userId===p.userId?'text-yellow-300':'text-orange-500'}/>}
-                      </div>
-                      <p className={'text-xs '+(selected?.userId===p.userId?'text-blue-200':'text-gray-400')}>{p.items.length} pantry items</p>
-                      {pTotal>0 && <p className={'text-xs mt-0.5 '+(selected?.userId===p.userId?'text-blue-200':'text-gray-400')}>Waste rate: {pWasteRate}%</p>}
-                      {rec.nextAppointment && <p className={'text-xs mt-1 '+(selected?.userId===p.userId?'text-blue-200':'text-blue-500')}>Appt: {rec.nextAppointment}</p>}
-                    </button>
-                  );
-                })}
+        <div className="flex-1 p-6 overflow-y-auto">
+          {!selected ? (
+            <div className="flex items-center justify-center h-full text-gray-400">
+              <p>Select a patient to view their data</p>
+            </div>
+          ) : (
+            <>
+              <div className="flex items-center justify-between mb-6">
+                <div>
+                  <h2 className="text-xl font-bold text-gray-800">{selected.name}</h2>
+                  <p className="text-sm text-gray-500">{selected.email}</p>
+                </div>
+                {saveRate(selected) < 50 && (
+                  <div className="bg-amber-50 border border-amber-200 text-amber-700 px-4 py-2 rounded-xl text-sm">
+                    ⚠️ High waste rate — {100 - saveRate(selected)}% of items wasted
+                  </div>
+                )}
               </div>
-              {selected && patientStats && (
-                <div className="bg-white rounded-2xl shadow-lg p-4 mt-4">
-                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Quick Stats</p>
-                  <div className="grid grid-cols-2 gap-2">
-                    {[['In Pantry',selected.items.length,'blue'],['Save Rate',patientStats.saveRate!==null?patientStats.saveRate+'%':'-','green'],['Used',patientStats.used,'green'],['Wasted',patientStats.wasted,'red']].map(([lbl,val,col]) => (
-                      <div key={lbl} className={'bg-'+col+'-50 rounded-xl p-3 text-center'}>
-                        <p className={'text-xl font-bold text-'+col+'-600'}>{val}</p>
-                        <p className="text-xs text-gray-500">{lbl}</p>
+
+              <div className="flex gap-2 mb-6 flex-wrap">
+                {['overview','messages','mealplan','goals','recipes'].map(t => (
+                  <button key={t} onClick={() => setActiveTab(t)}
+                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${activeTab === t ? 'bg-green-500 text-white' : 'bg-white border text-gray-600 hover:bg-gray-50'}`}>
+                    {t.charAt(0).toUpperCase() + t.slice(1)}
+                  </button>
+                ))}
+              </div>
+
+              {activeTab === 'overview' && (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="bg-white rounded-xl p-4 border">
+                    <h3 className="font-semibold text-gray-700 mb-3">Pantry ({selected.items?.length || 0} items)</h3>
+                    {selected.items?.slice(0, 8).map((item, i) => {
+                      const badge = expiryBadge(item.expiry_date);
+                      return (
+                        <div key={i} className="flex justify-between items-center py-2 border-b last:border-0">
+                          <span className="text-sm text-gray-700">{item.name}</span>
+                          {badge && <span className={`text-xs px-2 py-0.5 rounded-full ${badge.color}`}>{badge.label}</span>}
+                        </div>
+                      );
+                    })}
+                  </div>
+                  <div className="bg-white rounded-xl p-4 border">
+                    <h3 className="font-semibold text-gray-700 mb-3">Waste activity</h3>
+                    <div className="grid grid-cols-3 gap-3 mb-4">
+                      <div className="bg-green-50 rounded-lg p-3 text-center">
+                        <p className="text-2xl font-bold text-green-600">{selected.wasteLog?.filter(w => w.action === 'used').length || 0}</p>
+                        <p className="text-xs text-green-600">Used</p>
+                      </div>
+                      <div className="bg-red-50 rounded-lg p-3 text-center">
+                        <p className="text-2xl font-bold text-red-500">{selected.wasteLog?.filter(w => w.action === 'wasted').length || 0}</p>
+                        <p className="text-xs text-red-500">Wasted</p>
+                      </div>
+                      <div className="bg-blue-50 rounded-lg p-3 text-center">
+                        <p className="text-2xl font-bold text-blue-600">{saveRate(selected)}%</p>
+                        <p className="text-xs text-blue-600">Save rate</p>
+                      </div>
+                    </div>
+                    <h3 className="font-semibold text-gray-700 mb-2">Clinical notes</h3>
+                    <textarea value={clinicalNotes} onChange={e => setClinicalNotes(e.target.value)} rows={3}
+                      placeholder="Add clinical notes..."
+                      className="w-full border rounded-lg p-2 text-sm focus:ring-2 focus:ring-green-500 outline-none" />
+                    <button onClick={saveRecord} className="mt-2 w-full bg-green-500 text-white py-2 rounded-lg text-sm font-medium">Save notes</button>
+                  </div>
+                </div>
+              )}
+
+              {activeTab === 'messages' && (
+                <div className="bg-white rounded-xl p-4 border">
+                  <h3 className="font-semibold text-gray-700 mb-4">Send message to {selected.name}</h3>
+                  <div className="space-y-3 mb-4 max-h-64 overflow-y-auto">
+                    {selected.messages?.map((m, i) => (
+                      <div key={i} className={`p-3 rounded-xl text-sm ${m.from_user_id === currentUser.id ? 'bg-green-50 text-green-800 ml-8' : 'bg-gray-50 text-gray-700 mr-8'}`}>
+                        <p className="font-medium text-xs mb-1">{m.sender_name} · {new Date(m.sent_at).toLocaleDateString()}</p>
+                        {m.body}
+                      </div>
+                    ))}
+                  </div>
+                  <textarea value={msgBody} onChange={e => setMsgBody(e.target.value)} rows={3}
+                    placeholder="Type a reminder or message..."
+                    className="w-full border rounded-lg p-3 text-sm focus:ring-2 focus:ring-green-500 outline-none" />
+                  <button onClick={sendMessage} className="mt-2 w-full bg-green-500 text-white py-2 rounded-lg text-sm font-medium">Send message</button>
+                </div>
+              )}
+
+              {activeTab === 'mealplan' && (
+                <div className="bg-white rounded-xl p-4 border">
+                  <h3 className="font-semibold text-gray-700 mb-4">Build meal plan for {selected.name}</h3>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="bg-gray-50">
+                          <th className="p-2 text-left text-gray-500">Meal</th>
+                          {DAYS.map(d => <th key={d} className="p-2 text-gray-500 capitalize">{d.slice(0,3)}</th>)}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {SLOTS.map(slot => (
+                          <tr key={slot} className="border-t">
+                            <td className="p-2 font-medium text-gray-600 capitalize">{slot}</td>
+                            {DAYS.map(day => (
+                              <td key={day} className="p-1">
+                                <select
+                                  value={mealPlan[day]?.[slot]?.id || ''}
+                                  onChange={e => {
+                                    const recipe = recipes.find(r => r.id === parseInt(e.target.value));
+                                    setMealPlan(prev => ({
+                                      ...prev,
+                                      [day]: { ...prev[day], [slot]: recipe || null }
+                                    }));
+                                  }}
+                                  className="w-full text-xs border rounded p-1">
+                                  <option value="">--</option>
+                                  {recipes.filter(r => !r.meal_type || r.meal_type.includes(slot)).map(r => (
+                                    <option key={r.id} value={r.id}>{r.name}</option>
+                                  ))}
+                                </select>
+                              </td>
+                            ))}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  <button onClick={pushMealPlan} className="mt-4 w-full bg-green-500 text-white py-2 rounded-lg text-sm font-medium">Push meal plan to patient</button>
+                </div>
+              )}
+
+              {activeTab === 'goals' && (
+                <div className="bg-white rounded-xl p-4 border">
+                  <h3 className="font-semibold text-gray-700 mb-4">Set goal for {selected.name}</h3>
+                  <textarea value={goal} onChange={e => setGoal(e.target.value)} rows={4}
+                    placeholder="e.g. Reduce waste to under 2 items per week. Follow the meal plan Monday to Friday. Increase vegetable intake."
+                    className="w-full border rounded-lg p-3 text-sm focus:ring-2 focus:ring-green-500 outline-none" />
+                  <button onClick={saveRecord} className="mt-3 w-full bg-green-500 text-white py-2 rounded-lg text-sm font-medium">Save goal</button>
+                </div>
+              )}
+
+              {activeTab === 'recipes' && (
+                <div className="bg-white rounded-xl p-4 border">
+                  <h3 className="font-semibold text-gray-700 mb-4">Recommend a recipe to {selected.name}</h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    {recipes.slice(0, 10).map(r => (
+                      <div key={r.id} className="border rounded-xl p-3 flex justify-between items-start">
+                        <div>
+                          <p className="font-medium text-sm text-gray-800">{r.name}</p>
+                          <p className="text-xs text-gray-400">{r.prep_time}min · {r.calories}cal · {r.difficulty}</p>
+                        </div>
+                        <button onClick={async () => {
+                          await fetch(`${API}/api/messages`, {
+                            method: 'POST', headers: authHeaders(),
+                            body: JSON.stringify({ toUserId: selected.userId, body: `I recommend trying: ${r.name}. ${r.instructions?.slice(0,100)}...`, type: 'recipe' })
+                          });
+                          notify(`${r.name} recommended!`);
+                        }} className="text-xs bg-green-500 text-white px-3 py-1 rounded-lg">Send</button>
                       </div>
                     ))}
                   </div>
                 </div>
               )}
-            </div>
-
-            <div className="md:col-span-3 space-y-4">
-              {selected ? (
-                <>
-                  {flags.length>0 && (
-                    <div className="space-y-2">
-                      {flags.map((f,i) => (
-                        <div key={i} className={'flex items-center gap-3 p-3 rounded-xl text-sm font-medium '+(f.type==='warning'?'bg-red-50 border border-red-200 text-red-700':f.type==='alert'?'bg-orange-50 border border-orange-200 text-orange-700':'bg-blue-50 border border-blue-200 text-blue-700')}>
-                          <Flag size={15} className="shrink-0"/>{f.msg}
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                  <div className="bg-white rounded-2xl shadow-lg p-4">
-                    <div className="flex gap-1.5 mb-5 flex-wrap">
-                      {panelTabs.map(([k,lbl]) => (
-                        <button key={k} onClick={() => setPanel(k)}
-                          className={'py-1.5 px-3 rounded-xl text-xs font-semibold transition-all '+(panel===k?'bg-blue-600 text-white shadow':'bg-gray-100 text-gray-600 hover:bg-gray-200')}>
-                          {lbl}
-                        </button>
-                      ))}
-                    </div>
-
-                    {panel==='overview' && (
-                      <div>
-                        <h3 className="font-bold text-gray-800 mb-4 text-lg">{selected.name} - Overview</h3>
-                        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Current Pantry</p>
-                        {selected.items.length===0 ? (
-                          <p className="text-sm text-gray-400 mb-4 bg-gray-50 rounded-xl p-3">Pantry is empty.</p>
-                        ) : (
-                          <div className="grid grid-cols-2 gap-2 mb-4">
-                            {selected.items.map(item => {
-                              const s = expiryStatus(daysUntil(getDateStr(item)));
-                              return (
-                                <div key={item.id} className="flex items-center justify-between bg-gray-50 rounded-xl p-2.5 text-sm">
-                                  <span className="text-gray-700 font-medium truncate mr-2">{item.name}</span>
-                                  <span className={'text-xs font-semibold px-1.5 py-0.5 rounded-full border shrink-0 '+s.cls}>{s.label}</span>
-                                </div>
-                              );
-                            })}
-                          </div>
-                        )}
-                        {selected.wasteLog.length>0 && (
-                          <>
-                            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Recent Activity</p>
-                            <div className="space-y-1.5 max-h-40 overflow-y-auto">
-                              {[...selected.wasteLog].reverse().slice(0,6).map(e => (
-                                <div key={e.id} className={'flex items-center gap-3 p-2.5 rounded-lg '+(e.action==='used'?'bg-green-50':'bg-red-50')}>
-                                  {e.action==='used'?<CheckCircle size={14} className="text-green-500 shrink-0"/>:<XCircle size={14} className="text-red-500 shrink-0"/>}
-                                  <span className="text-sm text-gray-700 flex-1">{e.item_name||e.itemName}</span>
-                                  <span className={'text-xs font-semibold px-2 py-0.5 rounded-full '+(e.action==='used'?'bg-green-100 text-green-700':'bg-red-100 text-red-700')}>{e.action}</span>
-                                  <span className="text-xs text-gray-400 shrink-0">{e.date}</span>
-                                </div>
-                              ))}
-                            </div>
-                          </>
-                        )}
-                      </div>
-                    )}
-
-                    {panel==='clinical' && (
-                      <div className="space-y-4">
-                        <h3 className="font-bold text-gray-800 text-lg">{selected.name} - Clinical Profile</h3>
-                        {record.dob && (
-                          <div className="grid grid-cols-2 gap-4 text-sm">
-                            {[['Date of Birth',record.dob],['Phone',record.phone],['Address',record.address],['Patient Since',record.joinedDate]].map(([lbl,val]) => (
-                              <div key={lbl}>
-                                <p className="text-xs text-gray-500 font-semibold uppercase tracking-wide mb-1">{lbl}</p>
-                                <p className="text-gray-800">{val}</p>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                        {record.diagnosis && (
-                          <div>
-                            <p className="text-xs text-gray-500 font-semibold uppercase tracking-wide mb-2">Diagnosis</p>
-                            <div className="flex flex-wrap gap-2">
-                              {record.diagnosis.map((d,i) => <span key={i} className="bg-red-50 border border-red-200 text-red-700 px-3 py-1 rounded-full text-xs font-medium">{d}</span>)}
-                            </div>
-                          </div>
-                        )}
-                        {record.allergies && (
-                          <div>
-                            <p className="text-xs text-gray-500 font-semibold uppercase tracking-wide mb-2">Allergies</p>
-                            <div className="flex flex-wrap gap-2">
-                              {record.allergies.map((a,i) => <span key={i} className="bg-orange-50 border border-orange-200 text-orange-700 px-3 py-1 rounded-full text-xs font-medium">⚠ {a}</span>)}
-                            </div>
-                          </div>
-                        )}
-                        {record.dietaryRestrictions && (
-                          <div>
-                            <p className="text-xs text-gray-500 font-semibold uppercase tracking-wide mb-2">Dietary Restrictions</p>
-                            <div className="flex flex-wrap gap-2">
-                              {record.dietaryRestrictions.map((r,i) => <span key={i} className="bg-blue-50 border border-blue-200 text-blue-700 px-3 py-1 rounded-full text-xs font-medium">{r}</span>)}
-                            </div>
-                          </div>
-                        )}
-                        <div>
-                          <p className="text-xs text-gray-500 font-semibold uppercase tracking-wide mb-2">Next Appointment</p>
-                          <div className="flex gap-2">
-                            <input type="date" value={appointmentDate} onChange={e=>setAppointmentDate(e.target.value)}
-                              className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500"/>
-                            <button onClick={saveAppointment} className="bg-blue-500 text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-blue-600">Save</button>
-                          </div>
-                          {record.nextAppointment && <p className="text-sm text-blue-600 font-medium mt-2">Scheduled: {record.nextAppointment}</p>}
-                        </div>
-                        <div>
-                          <div className="flex items-center justify-between mb-2">
-                            <p className="text-xs text-gray-500 font-semibold uppercase tracking-wide">Clinical Notes</p>
-                            <button onClick={() => { setEditingNotes(!editingNotes); setClinicalNotes(record.notes||''); }}
-                              className="text-xs text-blue-500 hover:text-blue-700 font-semibold">{editingNotes?'Cancel':'Edit'}</button>
-                          </div>
-                          {editingNotes ? (
-                            <>
-                              <textarea value={clinicalNotes} onChange={e=>setClinicalNotes(e.target.value)} rows={4}
-                                className="w-full px-4 py-3 border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 resize-none"/>
-                              <button onClick={saveClinicalNotes} className="mt-2 bg-blue-500 text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-blue-600">Save Notes</button>
-                            </>
-                          ) : (
-                            <p className="text-sm text-gray-600 bg-gray-50 rounded-xl p-3 leading-relaxed">{record.notes||'No notes yet. Click Edit to add clinical notes.'}</p>
-                          )}
-                        </div>
-                      </div>
-                    )}
-
-                    {panel==='remind' && (
-                      <div>
-                        <h3 className="font-bold text-gray-800 mb-1">Send Reminder to {selected.name}</h3>
-                        <p className="text-xs text-gray-500 mb-4">Messages appear in the patient inbox immediately.</p>
-                        <textarea value={noteText} onChange={e=>setNoteText(e.target.value)} rows={4}
-                          className="w-full px-4 py-3 border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-green-500 resize-none"
-                          placeholder="e.g. Great progress this week! Try to use the chicken before Friday."/>
-                        <button onClick={() => sendMsg('note')}
-                          className="mt-3 w-full bg-green-500 text-white py-2.5 rounded-xl font-semibold flex items-center justify-center gap-2 hover:bg-green-600">
-                          <Send size={16}/> Send Reminder
-                        </button>
-                      </div>
-                    )}
-
-                    {panel==='mealplan' && (
-                      <div>
-                        <h3 className="font-bold text-gray-800 mb-1">Push Meal Plan to {selected.name}</h3>
-                        {record.diagnosis && record.diagnosis.some(d=>d.toLowerCase().includes('diabetes')) && (
-                          <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-3 mb-3 text-xs text-yellow-700 font-medium">
-                            ⚠ Diabetes flag - prioritise low-GI carbohydrates and avoid high-sugar meals.
-                          </div>
-                        )}
-                        <textarea value={planText} onChange={e=>setPlanText(e.target.value)} rows={8}
-                          className="w-full px-4 py-3 border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 resize-none"
-                          placeholder="Monday: Grilled fish with provision&#10;Tuesday: Callaloo soup&#10;Wednesday: Channa curry&#10;Thursday: Baked chicken&#10;Friday: Sweet potato bowl"/>
-                        <button onClick={() => sendMsg('mealplan')}
-                          className="mt-3 w-full bg-blue-500 text-white py-2.5 rounded-xl font-semibold flex items-center justify-center gap-2 hover:bg-blue-600">
-                          <BookOpen size={16}/> Send Meal Plan
-                        </button>
-                      </div>
-                    )}
-
-                    {panel==='goals' && (
-                      <div>
-                        <h3 className="font-bold text-gray-800 mb-1">Goal Setting - {selected.name}</h3>
-                        <p className="text-xs text-gray-500 mb-4">Set measurable behaviour change targets for this patient.</p>
-                        {record.currentGoal && (
-                          <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 mb-4">
-                            <p className="text-xs font-semibold text-blue-600 uppercase tracking-wide mb-1">Active Goal</p>
-                            <p className="text-sm text-gray-700">{record.currentGoal}</p>
-                          </div>
-                        )}
-                        {record.goalTarget && patientStats && (
-                          <div className="bg-gray-50 rounded-xl p-4 mb-4">
-                            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Goal Progress</p>
-                            <div className="flex items-center justify-between mb-1">
-                              <p className="text-sm text-gray-600">Target: max {record.goalTarget} waste events/week</p>
-                              <p className={'text-sm font-bold '+(patientStats.wasted<=record.goalTarget?'text-green-600':'text-red-600')}>
-                                {patientStats.wasted<=record.goalTarget?'On Track':'Needs Work'}
-                              </p>
-                            </div>
-                            <div className="w-full bg-gray-200 rounded-full h-2">
-                              <div className={'h-2 rounded-full '+(patientStats.wasted<=record.goalTarget?'bg-green-500':'bg-red-500')}
-                                style={{ width: Math.min(100,(patientStats.wasted/Math.max(record.goalTarget*2,1))*100)+'%' }}/>
-                            </div>
-                            <p className="text-xs text-gray-400 mt-1">{patientStats.wasted} waste events this session</p>
-                          </div>
-                        )}
-                        <textarea value={goalText} onChange={e=>setGoalText(e.target.value)} rows={3}
-                          className="w-full px-4 py-3 border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-purple-500 resize-none"
-                          placeholder="e.g. Reduce weekly food waste to under 2 items and cook at home 4x per week"/>
-                        <button onClick={() => sendMsg('goal')}
-                          className="mt-3 w-full bg-purple-500 text-white py-2.5 rounded-xl font-semibold flex items-center justify-center gap-2 hover:bg-purple-600">
-                          <Target size={16}/> Set New Goal
-                        </button>
-                      </div>
-                    )}
-
-                    {panel==='recipes' && (
-                      <div>
-                        <h3 className="font-bold text-gray-800 mb-1">Push Recipe to {selected.name}</h3>
-                        <p className="text-xs text-gray-500 mb-3">Browse and send a recipe based on what is in the patient pantry.</p>
-                        {record.allergies && (
-                          <div className="bg-orange-50 border border-orange-200 rounded-xl p-3 mb-3 text-xs text-orange-700">
-                            ⚠ Allergy alert: {record.allergies.join(', ')} - check ingredients before sending.
-                          </div>
-                        )}
-                        <div className="space-y-3 max-h-72 overflow-y-auto">
-                          {recipes.map(recipe => {
-                            const pNames  = selected.items.map(i=>i.name.toLowerCase());
-                            const avail   = [...pNames, ...STAPLES];
-                            const reqItems = recipe.ingredients ? recipe.ingredients.split(',').map(i=>i.trim().toLowerCase()) : [];
-                            const missing = reqItems.filter(req=>!avail.some(p=>p.includes(req)||req.includes(p)));
-                            const canMake = missing.length === 0;
-                            return (
-                              <div key={recipe.id} className={'border rounded-xl p-3 '+(canMake?'border-green-200 bg-green-50':'border-gray-200')}>
-                                <div className="flex items-center justify-between mb-1">
-                                  <p className="font-semibold text-sm text-gray-800">{recipe.name} {recipe.is_local?'(TT)':''}</p>
-                                  <div className="flex items-center gap-2">
-                                    {canMake && <span className="text-xs bg-green-100 text-green-700 font-semibold px-2 py-0.5 rounded-full">Can make now</span>}
-                                    <button onClick={() => sendMsg('note','Try this recipe: '+recipe.name+'\n\nIngredients:\n'+recipe.ingredients+'\n\nInstructions:\n'+recipe.instructions)}
-                                      className="bg-blue-500 text-white text-xs px-2.5 py-1 rounded-lg font-semibold hover:bg-blue-600">Send</button>
-                                  </div>
-                                </div>
-                                <p className="text-xs text-gray-500">{recipe.prep_time} min - {recipe.calories} cal - {recipe.difficulty}</p>
-                                {!canMake && missing.length>0 && <p className="text-xs text-orange-600 mt-1">Missing: {missing.join(', ')}</p>}
-                              </div>
-                            );
-                          })}
-                          {recipes.length===0 && <p className="text-sm text-gray-400 text-center py-4">No recipes available.</p>}
-                        </div>
-                      </div>
-                    )}
-
-                    {panel==='history' && (
-                      <div>
-                        <h3 className="font-bold text-gray-800 mb-4">Communication History - {selected.name}</h3>
-                        {sentForSelected.length===0 ? (
-                          <p className="text-sm text-gray-400 text-center py-8">No messages sent yet.</p>
-                        ) : (
-                          <div className="space-y-3 max-h-96 overflow-y-auto">
-                            {[...sentForSelected].reverse().map(m => {
-                              const styleMap = { note:'bg-yellow-50 border-yellow-200 text-yellow-600', mealplan:'bg-blue-50 border-blue-200 text-blue-600', goal:'bg-purple-50 border-purple-200 text-purple-600' };
-                              const labelMap = { note:'Reminder', mealplan:'Meal Plan', goal:'Goal' };
-                              const s = styleMap[m.type]||'bg-green-50 border-green-200 text-green-600';
-                              const parts = s.split(' ');
-                              return (
-                                <div key={m.id} className={'p-3 rounded-xl text-sm border '+parts[0]+' '+parts[1]}>
-                                  <div className="flex items-center justify-between mb-1.5">
-                                    <span className={'text-xs font-bold uppercase tracking-wide '+parts[2]}>{labelMap[m.type]||'Message'}</span>
-                                    <span className="text-xs text-gray-400">{m.time}</span>
-                                  </div>
-                                  <p className="text-gray-700 whitespace-pre-line text-xs leading-relaxed">{m.body}</p>
-                                </div>
-                              );
-                            })}
-                          </div>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                </>
-              ) : (
-                <div className="bg-white rounded-2xl shadow-lg p-16 text-center text-gray-400">
-                  <Eye size={48} className="mx-auto mb-4 opacity-30"/>
-                  <p className="font-semibold text-lg text-gray-500">Select a patient</p>
-                  <p className="text-sm mt-1">Choose a patient from the list to view their profile and data.</p>
-                </div>
-              )}
-            </div>
-          </div>
-        )}
+            </>
+          )}
+        </div>
       </div>
     </div>
   );
 }
-
-// ═══════════════════════════════════════════════════════════════════════
-// MAIN APP
-// ═══════════════════════════════════════════════════════════════════════
-export default function PantryMate() {
-  const [currentUser, setCurrentUser]       = useState(null);
-  const [sharedProfiles, setSharedProfiles] = useState([]);
-  const [activeTab, setActiveTab]           = useState('pantry');
-  const [items, setItems]                   = useState([]);
-  const [wasteLog, setWasteLog]             = useState([]);
-  const [dbRecipes, setDbRecipes]           = useState([]);
-  const [pendingDelete, setPendingDelete]   = useState(null);
-  const [showAddForm, setShowAddForm]       = useState(false);
-  const [newItem, setNewItem]               = useState({ name:'', category:'Other', quantity:1, unit:'item', expiryDate:'' });
+// ─── Household Dashboard ─────────────────────────────────────────────────────
+function HouseholdDashboard({ currentUser, onLogout }) {
+  const [activeTab, setActiveTab]         = useState('pantry');
+  const [items, setItems]                 = useState([]);
+  const [wasteLog, setWasteLog]           = useState([]);
+  const [dbRecipes, setDbRecipes]         = useState([]);
+  const [leftovers, setLeftovers]         = useState([]);
+  const [goals, setGoals]                 = useState(null);
+  const [goalProgress, setGoalProgress]   = useState(null);
+  const [mealPlan, setMealPlan]           = useState(null);
+  const [rewards, setRewards]             = useState(null);
+  const [recommendations, setRecommendations] = useState([]);
+  const [aiInsight, setAiInsight]         = useState('');
+  const [sharingOn, setSharingOn]         = useState(false);
+  const [notifications, setNotifications] = useState([]);
+  const [messages, setMessages]           = useState([]);
+  const [showAddForm, setShowAddForm]     = useState(false);
+  const [showGoalForm, setShowGoalForm]   = useState(false);
+  const [newItem, setNewItem]             = useState({ name:'', category:'Produce', quantity:1, unit:'item', expiryDate:'' });
+  const [newGoals, setNewGoals]           = useState({ wasteTarget:2, pantryUseTarget:80, mealPlanDaysTarget:5 });
+  const [pendingDelete, setPendingDelete] = useState(null);
   const [selectedRecipe, setSelectedRecipe] = useState(null);
-  const [servings, setServings]             = useState({});
-  const [dietFilter, setDietFilter]         = useState([]);
-  const [showExpiring, setShowExpiring]     = useState(false);
-  const [sharingOn, setSharingOn]           = useState(false);
-  const [scanIdx, setScanIdx]               = useState(0);
-  const [inboxMessages, setInboxMessages]   = useState([]);
+  const [dietFilter, setDietFilter]       = useState([]);
+  const [mealTypeFilter, setMealTypeFilter] = useState('');
+  const [recipeSearch, setRecipeSearch]   = useState('');
+  const [notification, setNotification]   = useState('');
+  const [mealPlanMode, setMealPlanMode]   = useState('view');
+  const [customPlan, setCustomPlan]       = useState({});
+  const [showLeftoverForm, setShowLeftoverForm] = useState(false);
+  const [leftoverItem, setLeftoverItem]   = useState('');
+  const [showPdfOptions, setShowPdfOptions] = useState(false);
+
+  const DAYS  = ['monday','tuesday','wednesday','thursday','friday','saturday','sunday'];
+  const SLOTS = ['breakfast','lunch','dinner','snack'];
+  const CATEGORIES = ['Produce','Dairy','Meat','Seafood','Grains','Legumes','Canned','Snacks','Beverages','Condiments','Baking','Oils','Frozen','Cooked/Prepared','Other'];
+  const DIET_TAGS  = ['vegan','vegetarian','gluten-free','high-protein','low-salt'];
+
+  const notify = useCallback((msg) => {
+    setNotification(msg);
+    setTimeout(() => setNotification(''), 3000);
+  }, []);
+
+  useEffect(() => {
+    fetchAll();
+  }, []);
+
+  const fetchAll = async () => {
+    await Promise.all([
+      fetchPantry(), fetchWaste(), fetchRecipes(), fetchLeftovers(),
+      fetchGoals(), fetchMealPlan(), fetchRewards(), fetchRecommendations(),
+      fetchSharingStatus(), fetchNotifications(), fetchMessages(), fetchAiInsight()
+    ]);
+  };
 
   const fetchPantry = async () => {
-    try {
-      const token = localStorage.getItem('token');
-      const res   = await fetch(`${API}/api/pantry`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      const data = await res.json();
-      if (res.ok) setItems(data);
-    } catch (err) {
-      console.error('Failed to fetch pantry:', err);
-    }
+    const res = await fetch(`${API}/api/pantry`, { headers: authHeaders() });
+    if (res.ok) setItems(await res.json());
   };
-
-  const fetchWasteLog = async () => {
-    try {
-      const token = localStorage.getItem('token');
-      const res   = await fetch(`${API}/api/waste`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      const data = await res.json();
-      if (res.ok) setWasteLog(data);
-    } catch (err) {
-      console.error('Failed to fetch waste log:', err);
-    }
+  const fetchWaste = async () => {
+    const res = await fetch(`${API}/api/waste`, { headers: authHeaders() });
+    if (res.ok) setWasteLog(await res.json());
   };
-
   const fetchRecipes = async () => {
-    try {
-      const token = localStorage.getItem('token');
-      const res   = await fetch(`${API}/api/recipes/match`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      const data = await res.json();
-      if (res.ok) setDbRecipes(data.recipes || []);
-    } catch (err) {
-      console.error('Failed to fetch recipes:', err);
-    }
+    const res = await fetch(`${API}/api/recipes/matched`, { headers: authHeaders() });
+    if (res.ok) setDbRecipes(await res.json());
   };
-
+  const fetchLeftovers = async () => {
+    const res = await fetch(`${API}/api/leftovers`, { headers: authHeaders() });
+    if (res.ok) setLeftovers(await res.json());
+  };
+  const fetchGoals = async () => {
+    const res = await fetch(`${API}/api/goals`, { headers: authHeaders() });
+    if (res.ok) setGoals(await res.json());
+    const res2 = await fetch(`${API}/api/goals/progress`, { headers: authHeaders() });
+    if (res2.ok) setGoalProgress(await res2.json());
+  };
+  const fetchMealPlan = async () => {
+    const res = await fetch(`${API}/api/mealplanner`, { headers: authHeaders() });
+    if (res.ok) { const d = await res.json(); setMealPlan(d); if (d?.plan_data) setCustomPlan(d.plan_data); }
+  };
+  const fetchRewards = async () => {
+    const res = await fetch(`${API}/api/rewards`, { headers: authHeaders() });
+    if (res.ok) setRewards(await res.json());
+  };
+  const fetchRecommendations = async () => {
+    const res = await fetch(`${API}/api/recommendations`, { headers: authHeaders() });
+    if (res.ok) { const d = await res.json(); setRecommendations(d.recommendations || []); }
+  };
+  const fetchAiInsight = async () => {
+    const res = await fetch(`${API}/api/recommendations/ai-insight`, { headers: authHeaders() });
+    if (res.ok) { const d = await res.json(); setAiInsight(d.insight || ''); }
+  };
   const fetchSharingStatus = async () => {
-    try {
-      const token = localStorage.getItem('token');
-      const res = await fetch(`${API}/api/sharing/status`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      const data = await res.json();
-      if (res.ok) setSharingOn(data.sharing_enabled === 1);
-    } catch (err) { console.error('Failed to fetch sharing status:', err); }
+    const res = await fetch(`${API}/api/sharing/status`, { headers: authHeaders() });
+    if (res.ok) { const d = await res.json(); setSharingOn(d.sharing_enabled === 1); }
+  };
+  const fetchNotifications = async () => {
+    const res = await fetch(`${API}/api/notifications`, { headers: authHeaders() });
+    if (res.ok) setNotifications(await res.json());
+  };
+  const fetchMessages = async () => {
+    const res = await fetch(`${API}/api/messages`, { headers: authHeaders() });
+    if (res.ok) setMessages(await res.json());
   };
 
-  const fetchSharedPatients = async () => {
-    try {
-      const token = localStorage.getItem('token');
-      const res = await fetch(`${API}/api/sharing/patients`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      const data = await res.json();
-      if (res.ok) setSharedProfiles(data);
-    } catch (err) { console.error('Failed to fetch patients:', err); }
-  };
-
-  const login = async (user) => {
-    setCurrentUser(user);
-    await fetchRecipes();
-    if (user.role === 'user') {
-      setInboxMessages([]);
+  const addItem = async () => {
+    if (!newItem.name.trim()) return;
+    const res = await fetch(`${API}/api/pantry`, {
+      method: 'POST', headers: authHeaders(), body: JSON.stringify(newItem)
+    });
+    if (res.ok) {
+      setShowAddForm(false);
+      setNewItem({ name:'', category:'Produce', quantity:1, unit:'item', expiryDate:'' });
       await fetchPantry();
-      await fetchWasteLog();
-      await fetchSharingStatus();
-    } else {
-      await fetchSharedPatients();
+      notify('Item added!');
     }
   };
 
-  const logout = () => {
-    setCurrentUser(null);
-    setSharingOn(false);
-    setItems([]);
-    setWasteLog([]);
-    setDbRecipes([]);
-    localStorage.removeItem('token');
+  const confirmDelete = async (action) => {
+    if (!pendingDelete) return;
+    await fetch(`${API}/api/waste`, {
+      method: 'POST', headers: authHeaders(),
+      body: JSON.stringify({ itemName: pendingDelete.name, action })
+    });
+    await fetch(`${API}/api/pantry/${pendingDelete.id}`, { method: 'DELETE', headers: authHeaders() });
+    if (action === 'used') {
+      setShowLeftoverForm(true);
+      setLeftoverItem(pendingDelete.name);
+    }
+    setPendingDelete(null);
+    await fetchPantry(); await fetchWaste(); await fetchRewards();
+    notify(action === 'used' ? 'Logged as used!' : 'Logged as wasted');
+  };
+
+  const logLeftover = async () => {
+    if (!leftoverItem.trim()) return;
+    await fetch(`${API}/api/leftovers`, {
+      method: 'POST', headers: authHeaders(),
+      body: JSON.stringify({ itemName: leftoverItem })
+    });
+    setShowLeftoverForm(false); setLeftoverItem('');
+    await fetchLeftovers();
+    notify('Leftover logged!');
+  };
+
+  const resolveLeftover = async (id, outcome) => {
+    await fetch(`${API}/api/leftovers/${id}/resolve`, {
+      method: 'PATCH', headers: authHeaders(), body: JSON.stringify({ outcome })
+    });
+    await fetchLeftovers(); await fetchWaste();
+    notify(`Leftover marked as ${outcome}`);
   };
 
   const toggleSharing = async () => {
     const newState = !sharingOn;
     setSharingOn(newState);
-    try {
-      const token = localStorage.getItem('token');
-      await fetch(`${API}/api/sharing/toggle`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ enabled: newState })
-      });
-    } catch (err) { console.error('Failed to save sharing:', err); }
+    await fetch(`${API}/api/sharing/toggle`, {
+      method: 'POST', headers: authHeaders(),
+      body: JSON.stringify({ enabled: newState })
+    });
   };
 
-  const requestDelete = (item) => setPendingDelete(item);
+  const saveGoals = async () => {
+    await fetch(`${API}/api/goals`, {
+      method: 'POST', headers: authHeaders(), body: JSON.stringify(newGoals)
+    });
+    setShowGoalForm(false); await fetchGoals();
+    notify('Goals saved!');
+  };
 
-  const confirmDelete = async (action) => {
-    if (!pendingDelete) return;
-    try {
-      const token = localStorage.getItem('token');
-      await fetch(`${API}/api/waste`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ item_name: pendingDelete.name, action, pantry_item_id: pendingDelete.id })
+  const generateMealPlan = async () => {
+    const res = await fetch(`${API}/api/mealplanner/generate`, { method: 'POST', headers: authHeaders() });
+    if (res.ok) {
+      const d = await res.json();
+      setCustomPlan(d.planData);
+      await fetch(`${API}/api/mealplanner`, {
+        method: 'POST', headers: authHeaders(),
+        body: JSON.stringify({ planData: d.planData })
       });
-      await fetchPantry();
-      await fetchWasteLog();
-      setPendingDelete(null);
-    } catch (err) {
-      console.error('Failed to log waste:', err);
+      await fetchMealPlan();
+      notify('Meal plan generated!');
     }
   };
 
-  const addItem = async () => {
-    if (!newItem.name || !newItem.expiryDate) { alert('Please fill in item name and expiry date'); return; }
-    try {
-      const token = localStorage.getItem('token');
-      const res   = await fetch(`${API}/api/pantry`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ name: newItem.name, category: newItem.category, quantity: newItem.quantity, unit: newItem.unit, expiry_date: newItem.expiryDate })
-      });
-      if (res.ok) {
-        await fetchPantry();
-        await fetchRecipes();
-        setNewItem({ name:'', category:'Other', quantity:1, unit:'item', expiryDate:'' });
-        setShowAddForm(false);
-      }
-    } catch (err) { console.error('Failed to add item:', err); }
+  const saveMealPlan = async () => {
+    await fetch(`${API}/api/mealplanner`, {
+      method: 'POST', headers: authHeaders(), body: JSON.stringify({ planData: customPlan })
+    });
+    await fetchMealPlan(); notify('Meal plan saved!');
   };
 
-  const scanBarcode = () => {
-    const scanned = DEMO_SCAN_QUEUE[scanIdx % DEMO_SCAN_QUEUE.length];
-    setItems(prev => [...prev, { id: Date.now(), ...scanned }]);
-    setScanIdx(i => i + 1);
+  const scanBarcode = async () => {
+    const res = await fetch(`${API}/api/barcode/scan`, { headers: authHeaders() });
+    if (res.ok) {
+      const item = await res.json();
+      setNewItem({ name: item.name, category: item.category, quantity: item.quantity, unit: item.unit, expiryDate: item.expiryDate });
+      setShowAddForm(true);
+    }
   };
 
-  const pantryNames = items.map(i => i.name.toLowerCase());
-  const available   = [...pantryNames, ...STAPLES];
+  const stats = {
+    total: wasteLog.length,
+    used: wasteLog.filter(w => w.action === 'used').length,
+    wasted: wasteLog.filter(w => w.action === 'wasted').length,
+    saveRate: wasteLog.length > 0 ? Math.round((wasteLog.filter(w => w.action === 'used').length / wasteLog.length) * 100) : 0
+  };
 
-  const matchedRecipes = dbRecipes.filter(r => {
-    const required = r.ingredients ? r.ingredients.split(',').map(i=>i.trim().toLowerCase()) : [];
-    const missing  = required.filter(req => !available.some(p=>p.includes(req)||req.includes(p)));
-    const hasMatch = required.some(req => pantryNames.some(p=>p.includes(req)||req.includes(p)));
-    const meetsFilter = dietFilter.every(d => (r.dietary_tags||'').includes(d));
-    if (!meetsFilter) return false;
-    if (missing.length > 3 && !hasMatch) return false;
-    r.canMake      = missing.length === 0;
-    r.missingItems = missing;
-    return true;
-  }).sort((a,b) => (a.canMake===b.canMake?0:a.canMake?-1:1));
+  const expiringSoon = items.filter(i => i.expiry_date && daysLeft(i.expiry_date) !== null && daysLeft(i.expiry_date) <= 3);
 
-  const sorted       = [...items].sort((a,b) => daysUntil(getDateStr(a)) - daysUntil(getDateStr(b)));
-  const expiringSoon = items.filter(i => { const d=daysUntil(getDateStr(i)); return d>=0&&d<=7; }).length;
-  const usedCount    = wasteLog.filter(e => e.action==='used').length;
-  const wastedCount  = wasteLog.filter(e => e.action==='wasted').length;
-  const saveRate     = wasteLog.length > 0 ? Math.round(usedCount/wasteLog.length*100) : null;
+  const filteredRecipes = dbRecipes.filter(r => {
+    const matchDiet = dietFilter.length === 0 || dietFilter.every(f => r.dietary_tags?.includes(f));
+    const matchMeal = !mealTypeFilter || r.meal_type?.includes(mealTypeFilter);
+    const matchSearch = !recipeSearch || r.name?.toLowerCase().includes(recipeSearch.toLowerCase()) || r.ingredients?.toLowerCase().includes(recipeSearch.toLowerCase());
+    return matchDiet && matchMeal && matchSearch;
+  });
 
-  const CATS  = ['Dairy','Bakery','Produce','Meat','Pantry','Frozen','Cooked / Prepared','Other'];
-  const UNITS = ['item','count','lb','kg','oz','g','bottle','carton','loaf','bag','can'];
+  const unreadCount = notifications.filter(n => !n.is_read).length;
 
-  if (!currentUser) return <AuthScreen onLogin={login}/>;
-  if (currentUser.role === 'dietician')
-    return <DietitianDashboard currentUser={currentUser} sharedProfiles={sharedProfiles} onLogout={logout} dbRecipes={dbRecipes}/>;
+  // ── Bottom nav tabs ──
+  const tabs = [
+    { id: 'pantry',     label: 'Pantry'  },
+    { id: 'recipes',    label: 'Recipes' },
+    { id: 'allrecipes', label: 'Browse'  },
+    { id: 'mealplan',   label: 'Planner' },
+    { id: 'stats',      label: 'Stats'   },
+  ];
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-green-50 to-blue-50 p-4">
-      <div className="max-w-4xl mx-auto">
+    <div className="min-h-screen bg-gray-50 pb-20">
+      {notification && (
+        <div className="fixed top-4 right-4 bg-green-500 text-white px-6 py-3 rounded-xl shadow-lg z-50 animate-pulse">
+          {notification}
+        </div>
+      )}
 
-        {pendingDelete && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-sm">
-              <h3 className="text-lg font-bold text-gray-800 mb-1">Removing: <span className="text-green-600">{pendingDelete.name}</span></h3>
-              <p className="text-gray-500 text-sm mb-6">Did you use this or was it wasted?</p>
-              <div className="flex gap-3">
-                <button onClick={()=>confirmDelete('used')} className="flex-1 bg-green-500 text-white py-3 rounded-xl font-semibold flex items-center justify-center gap-2 hover:bg-green-600">
-                  <CheckCircle size={20}/> Used It
-                </button>
-                <button onClick={()=>confirmDelete('wasted')} className="flex-1 bg-red-500 text-white py-3 rounded-xl font-semibold flex items-center justify-center gap-2 hover:bg-red-600">
-                  <XCircle size={20}/> Wasted
-                </button>
+      {/* Header */}
+      <div className="bg-white border-b px-4 py-3 flex justify-between items-center sticky top-0 z-40">
+        <div>
+          <h1 onClick={() => setActiveTab('pantry')} className="text-base font-bold text-gray-800 cursor-pointer active:text-green-600">WasteLess PantryMate</h1>
+          <p className="text-xs text-gray-400">{greeting()}, {currentUser.name.split(' ')[0]}! 👋</p>
+        </div>
+        <div className="flex items-center gap-2">
+          {unreadCount > 0 && (
+            <span className="bg-red-500 text-white text-xs w-5 h-5 rounded-full flex items-center justify-center">{unreadCount}</span>
+          )}
+          <button onClick={() => setShowPdfOptions(true)}
+            className="text-xs bg-blue-50 text-blue-600 px-3 py-1.5 rounded-lg border border-blue-200">Share PDF</button>
+          <button onClick={onLogout} className="text-xs text-gray-400 hover:text-red-500 px-2 py-1.5 border rounded-lg">Out</button>
+        </div>
+      </div>
+
+      {/* Main content */}
+      <div className="max-w-2xl mx-auto px-4 pt-4">
+
+        {/* AI Insight Card */}
+        {aiInsight && (
+          <div className="bg-gradient-to-r from-green-50 to-emerald-50 border border-green-200 rounded-2xl p-4 mb-4">
+            <div className="flex items-start gap-3">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#1D9E75" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="10" rx="2"/><circle cx="12" cy="5" r="2"/><path d="M12 7v4"/><line x1="8" y1="15" x2="8" y2="15"/><line x1="16" y1="15" x2="16" y2="15"/><path d="M8 15h.01M16 15h.01"/><line x1="3" y1="16" x2="1" y2="16"/><line x1="21" y1="16" x2="23" y2="16"/></svg>
+              <div>
+                <p className="text-xs font-semibold text-green-700 mb-1">Smart insight</p>
+                <p className="text-sm text-green-800 leading-relaxed">{aiInsight}</p>
               </div>
-              <button onClick={()=>setPendingDelete(null)} className="mt-3 w-full text-xs text-gray-400 hover:text-gray-600 text-center">Cancel</button>
             </div>
           </div>
         )}
 
-        <div className="bg-white rounded-2xl shadow-lg p-6 mb-6">
-          <div className="flex items-center justify-between mb-4">
-            <div>
-              <h1 className="text-2xl font-bold text-gray-800">WasteLess PantryMate</h1>
-              <p className="text-gray-500 text-sm">Welcome, {currentUser.name}</p>
-            </div>
-            <div className="flex items-center gap-2">
-              <button onClick={toggleSharing}
-                className={'flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-semibold transition-all '+(sharingOn?'bg-blue-500 text-white':'bg-gray-100 text-gray-600 hover:bg-gray-200')}>
-                <Share2 size={15}/>{sharingOn?'Shared':'Share'}
-              </button>
-              <button onClick={logout} className="text-gray-400 hover:text-red-500 transition-colors p-2">
-                <LogOut size={18}/>
-              </button>
-            </div>
-          </div>
-
-          {sharingOn && (
-            <div className="flex items-start gap-2 bg-blue-50 border border-blue-200 rounded-xl p-3 mb-4 text-sm text-blue-700">
-              <Eye size={15} className="mt-0.5 shrink-0"/>
-              Your pantry and waste log are visible to your dietitian.
-            </div>
-          )}
-
-          {inboxMessages.length > 0 && (
-            <div className="mb-4 space-y-2">
-              {inboxMessages.map(m => (
-                <div key={m.id} className={'p-3 rounded-xl border text-sm '+(m.type==='mealplan'?'bg-purple-50 border-purple-200':'bg-yellow-50 border-yellow-200')}>
-                  <div className="flex items-center gap-2 mb-1">
-                    <Bell size={13} className={m.type==='mealplan'?'text-purple-500':'text-yellow-500'}/>
-                    <span className="font-semibold text-gray-700 text-xs">{m.from}</span>
-                    <span className="text-xs text-gray-400 ml-auto">{m.time}</span>
-                  </div>
-                  <p className="text-gray-600 whitespace-pre-line text-xs">{m.body}</p>
+        {/* Smart Recommendations */}
+        {recommendations.length > 0 && (
+          <div className="mb-4 space-y-2">
+            {recommendations.slice(0, 2).map((rec, i) => (
+              <div key={i} className="bg-amber-50 border border-amber-200 rounded-xl p-3 flex items-start gap-3">
+                <span style={{flexShrink:0}}>
+                  {rec.type === 'expiry_alert' && <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#B45309" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>}
+                  {rec.type === 'meal_suggestion' && <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#B45309" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M6 13.87A4 4 0 0 1 7.41 6a5.11 5.11 0 0 1 1.05-1.54 5 5 0 0 1 7.08 0A5.11 5.11 0 0 1 16.59 6 4 4 0 0 1 18 13.87V21H6Z"/><line x1="6" y1="17" x2="18" y2="17"/></svg>}
+                  {rec.type === 'leftover_reminder' && <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#B45309" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>}
+                  {rec.type === 'waste_pattern' && <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#B45309" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>}
+                  {rec.type === 'shopping_suggestion' && <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#B45309" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></svg>}
+                </span>
+                <div>
+                  <p className="text-xs font-semibold text-amber-800">{rec.title}</p>
+                  <p className="text-xs text-amber-700">{rec.message}</p>
                 </div>
-              ))}
-            </div>
-          )}
-
-          <div className="flex gap-2 mb-4">
-            {[['pantry','Pantry',<Package size={16}/>],['recipes','Recipes ('+matchedRecipes.length+')',<ChefHat size={16}/>],['stats','My Stats',<Leaf size={16}/>]].map(([tab,lbl,icon]) => (
-              <button key={tab} onClick={()=>setActiveTab(tab)}
-                className={'flex-1 py-2.5 px-2 rounded-xl text-sm font-semibold transition-all flex items-center justify-center gap-1.5 '+(activeTab===tab?'bg-gradient-to-r from-green-500 to-green-600 text-white shadow-lg':'bg-gray-100 text-gray-600 hover:bg-gray-200')}>
-                {icon}{lbl}
-              </button>
+              </div>
             ))}
           </div>
-
-          <div className="grid grid-cols-2 gap-3">
-            <div className="bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl p-4 text-white">
-              <div className="flex items-center gap-2 mb-1"><Package size={16}/><span className="text-xs opacity-80">Total Items</span></div>
-              <div className="text-3xl font-bold">{items.length}</div>
-            </div>
-            <button onClick={()=>setShowExpiring(!showExpiring)}
-              className="bg-gradient-to-br from-orange-500 to-orange-600 rounded-xl p-4 text-white text-left hover:shadow-xl transition-all">
-              <div className="flex items-center gap-2 mb-1"><AlertCircle size={16}/><span className="text-xs opacity-80">Expiring Soon</span></div>
-              <div className="text-3xl font-bold">{expiringSoon}</div>
-            </button>
-          </div>
-        </div>
-
-        {showExpiring && (
-          <div className="bg-white rounded-2xl shadow-lg p-6 mb-6">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-bold text-gray-800">Expiring Soon</h2>
-              <button onClick={()=>setShowExpiring(false)} className="text-gray-400 hover:text-gray-600">X</button>
-            </div>
-            {sorted.filter(i=>{ const d=daysUntil(getDateStr(i)); return d>=0&&d<=7; }).length===0
-              ? <p className="text-center text-green-600 font-semibold py-4">Nothing expiring soon!</p>
-              : <div className="space-y-2">
-                {sorted.filter(i=>{ const d=daysUntil(getDateStr(i)); return d>=0&&d<=7; }).map(item => {
-                  const s = expiryStatus(daysUntil(getDateStr(item)));
-                  return (
-                    <div key={item.id} className="flex items-center justify-between border border-orange-200 rounded-xl p-3">
-                      <span className="font-semibold text-gray-800 text-sm">{item.name}</span>
-                      <span className={'text-xs font-semibold px-2 py-0.5 rounded-full border '+s.cls}>{s.label}</span>
-                    </div>
-                  );
-                })}
-              </div>
-            }
-          </div>
         )}
 
-        {activeTab==='pantry' && (
-          <>
-            <div className="flex gap-3 mb-4">
-              <button onClick={()=>setShowAddForm(!showAddForm)}
-                className="flex-1 bg-gradient-to-r from-green-500 to-green-600 text-white py-3 rounded-xl font-semibold shadow-lg flex items-center justify-center gap-2 hover:shadow-xl transition-all">
-                <Plus size={20}/> Add Item
-              </button>
-              <button onClick={scanBarcode}
-                className="flex-1 bg-gradient-to-r from-blue-500 to-blue-600 text-white py-3 rounded-xl font-semibold shadow-lg flex items-center justify-center gap-2 hover:shadow-xl transition-all">
-                <Scan size={20}/> Scan Barcode <span className="text-xs bg-white bg-opacity-20 px-1.5 py-0.5 rounded-full">Demo</span>
-              </button>
+        {/* ── PANTRY TAB ── */}
+        {activeTab === 'pantry' && (
+          <div>
+            <div className="grid grid-cols-2 gap-3 mb-4">
+              <div className="bg-blue-500 rounded-2xl p-4 text-white">
+                <p className="text-xs opacity-80">Total items</p>
+                <p className="text-3xl font-bold">{items.length}</p>
+              </div>
+              <div className="bg-orange-500 rounded-2xl p-4 text-white">
+                <p className="text-xs opacity-80">Expiring soon</p>
+                <p className="text-3xl font-bold">{expiringSoon.length}</p>
+              </div>
             </div>
 
-            {showAddForm && (
-              <div className="bg-white rounded-2xl shadow-lg p-6 mb-4">
-                <h2 className="text-lg font-bold text-gray-800 mb-4">Add New Item</h2>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Item Name</label>
-                    <input value={newItem.name} onChange={e=>setNewItem({...newItem,name:e.target.value})}
-                      placeholder="e.g. Chicken, Dasheen, Oats"
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"/>
+            <div className="flex gap-2 mb-4">
+              <button onClick={() => setShowAddForm(true)}
+                className="flex-1 bg-green-500 text-white py-3 rounded-xl font-medium text-sm">+ Add item</button>
+              <button onClick={scanBarcode}
+                className="flex-1 bg-blue-500 text-white py-3 rounded-xl font-medium text-sm">📷 Scan barcode</button>
+            </div>
+
+            {/* Leftovers */}
+            {leftovers.length > 0 && (
+              <div className="mb-4">
+                <h3 className="text-sm font-semibold text-gray-600 mb-2">♻️ Leftovers</h3>
+                {leftovers.map(l => (
+                  <div key={l.id} className="bg-purple-50 border border-purple-200 rounded-xl p-3 mb-2 flex justify-between items-center">
+                    <div>
+                      <p className="text-sm font-medium text-purple-800">{l.item_name}</p>
+                      <p className="text-xs text-purple-500">Cooked {new Date(l.cooked_date).toLocaleDateString()}</p>
+                    </div>
+                    <div className="flex gap-2">
+                      <button onClick={() => resolveLeftover(l.id, 'used')}
+                        className="text-xs bg-green-500 text-white px-2 py-1 rounded-lg">Used</button>
+                      <button onClick={() => resolveLeftover(l.id, 'wasted')}
+                        className="text-xs bg-red-400 text-white px-2 py-1 rounded-lg">Wasted</button>
+                    </div>
                   </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Category</label>
-                    <select value={newItem.category} onChange={e=>setNewItem({...newItem,category:e.target.value})}
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500">
-                      {CATS.map(c=><option key={c}>{c}</option>)}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Quantity</label>
-                    <input type="number" min="1" value={newItem.quantity}
-                      onChange={e=>setNewItem({...newItem,quantity:parseInt(e.target.value)||1})}
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"/>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Unit</label>
-                    <select value={newItem.unit} onChange={e=>setNewItem({...newItem,unit:e.target.value})}
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500">
-                      {UNITS.map(u=><option key={u}>{u}</option>)}
-                    </select>
-                  </div>
-                  <div className="md:col-span-2">
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Expiry Date</label>
-                    <input type="date" value={newItem.expiryDate} onChange={e=>setNewItem({...newItem,expiryDate:e.target.value})}
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"/>
-                  </div>
-                </div>
-                <div className="flex gap-3 mt-4">
-                  <button onClick={addItem} className="flex-1 bg-green-500 text-white py-2.5 rounded-lg font-semibold hover:bg-green-600">Add to Pantry</button>
-                  <button onClick={()=>setShowAddForm(false)} className="flex-1 bg-gray-200 text-gray-700 py-2.5 rounded-lg font-semibold hover:bg-gray-300">Cancel</button>
-                </div>
+                ))}
               </div>
             )}
 
-            <div className="bg-white rounded-2xl shadow-lg p-6">
-              <h2 className="text-lg font-bold text-gray-800 mb-4">Pantry Inventory</h2>
-              {sorted.length===0 ? (
-                <div className="text-center py-12 text-gray-400">
-                  <Package size={48} className="mx-auto mb-3 opacity-40"/>
-                  <p>Your pantry is empty. Add some items!</p>
+            {/* Pantry list */}
+            <h3 className="text-sm font-semibold text-gray-600 mb-2">Pantry inventory</h3>
+            {items.length === 0 && (
+              <div className="text-center py-12 text-gray-400">
+                <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round" className="mb-2 mx-auto">
+                  <path d="M20 7H4a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2z"/>
+                  <path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/>
+                  <line x1="12" y1="12" x2="12" y2="16"/>
+                  <line x1="10" y1="14" x2="14" y2="14"/>
+                </svg>
+                <p className="text-sm">Your pantry is empty — add your first item!</p>
+              </div>
+            )}
+            {items.map(item => {
+              const badge = expiryBadge(item.expiry_date);
+              return (
+                <div key={item.id} className="bg-white rounded-xl border p-4 mb-2 flex justify-between items-center">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="font-medium text-gray-800 text-sm">{item.name}</span>
+                      {badge && <span className={`text-xs px-2 py-0.5 rounded-full ${badge.color}`}>{badge.label}</span>}
+                    </div>
+                    <p className="text-xs text-gray-400 mt-0.5">{item.category} · {item.quantity} {item.unit}</p>
+                  </div>
+                  <button onClick={() => setPendingDelete(item)}
+                    className="w-8 h-8 bg-red-50 text-red-400 rounded-full flex items-center justify-center hover:bg-red-100">✕</button>
                 </div>
-              ) : (
-                <div className="space-y-3">
-                  {sorted.map(item => {
-                    const s = expiryStatus(daysUntil(getDateStr(item)));
-                    return (
-                      <div key={item.id} className="border border-gray-200 rounded-xl p-4 hover:shadow-md transition-shadow">
-                        <div className="flex items-start justify-between">
-                          <div className="flex-1">
-                            <div className="flex items-center gap-2 mb-1">
-                              <span className="font-semibold text-gray-800">{item.name}</span>
-                              <span className={'px-2 py-0.5 rounded-full text-xs font-semibold border '+s.cls}>{s.label}</span>
-                            </div>
-                            <p className="text-xs text-gray-500">{item.category} - {parseFloat(item.quantity)} {item.unit} - Expires {formatDate(getDateStr(item))}</p>
-                          </div>
-                          <button onClick={()=>requestDelete(item)} className="ml-4 text-red-400 hover:text-red-600 transition-colors">
-                            <Trash2 size={18}/>
-                          </button>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-          </>
+              );
+            })}
+          </div>
         )}
 
-        {activeTab==='recipes' && (
-          <div className="bg-white rounded-2xl shadow-lg p-6">
-            <div className="flex items-center gap-3 mb-4">
-              <ChefHat size={24} className="text-green-600"/>
-              <div>
-                <h2 className="text-lg font-bold text-gray-800">Recipe Suggestions</h2>
-                <p className="text-xs text-gray-500">Based on your pantry - local and international</p>
-              </div>
-            </div>
-            <div className="flex flex-wrap gap-2 mb-5">
-              {['vegan','vegetarian','high-protein','low-salt','low-sugar','low-fat','high-fibre','dairy-free'].map(d => (
-                <button key={d} onClick={()=>setDietFilter(p=>p.includes(d)?p.filter(x=>x!==d):[...p,d])}
-                  className={'px-3 py-1.5 rounded-full text-xs font-semibold transition-all '+(dietFilter.includes(d)?'bg-green-500 text-white':'bg-gray-100 text-gray-600 hover:bg-gray-200')}>
-                  {d.split('-').map(w=>w[0].toUpperCase()+w.slice(1)).join(' ')}
+        {/* ── RECIPES TAB ── */}
+        {activeTab === 'recipes' && (
+          <div>
+            <h2 className="text-base font-bold text-gray-800 mb-1">Recipe suggestions</h2>
+            <p className="text-xs text-gray-400 mb-3">Based on your pantry · {mealTimeLabel()} time</p>
+
+            <input value={recipeSearch} onChange={e => setRecipeSearch(e.target.value)}
+              placeholder="Search recipes or ingredients..."
+              className="w-full border rounded-xl px-4 py-2.5 text-sm mb-3 focus:ring-2 focus:ring-green-500 outline-none" />
+
+            <div className="flex flex-wrap gap-2 mb-3">
+              {DIET_TAGS.map(tag => (
+                <button key={tag} onClick={() => setDietFilter(prev => prev.includes(tag) ? prev.filter(t => t !== tag) : [...prev, tag])}
+                  className={`text-xs px-3 py-1 rounded-full border transition-all ${dietFilter.includes(tag) ? 'bg-green-500 text-white border-green-500' : 'text-gray-500 border-gray-200'}`}>
+                  {tag}
                 </button>
               ))}
             </div>
-            {items.length===0 ? (
-              <p className="text-center text-gray-400 py-8 text-sm">Your pantry is empty — add items to get recipe suggestions.</p>
-            ) : matchedRecipes.length===0 ? (
-              <p className="text-center text-gray-400 py-8 text-sm">No matches - try adding more pantry items or clearing filters.</p>
-            ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {matchedRecipes.map(recipe => {
-                  const mult     = servings[recipe.id] || 1;
-                  const srvCount = (recipe.base_servings||1) * mult;
-                  return (
-                    <div key={recipe.id}
-                      className={'border-2 rounded-xl p-4 cursor-pointer hover:shadow-lg transition-all '+(recipe.canMake?'border-gray-200 hover:border-green-400':'border-orange-200 bg-orange-50')}
-                      onClick={()=>setSelectedRecipe(recipe.id===selectedRecipe?null:recipe.id)}>
-                      <div className="flex items-start justify-between mb-2">
-                        <h3 className="font-bold text-gray-800 flex-1 leading-snug text-sm">{recipe.name}</h3>
-                        <div className="flex gap-1 ml-2 shrink-0">
-                          {recipe.is_local && <span className="bg-yellow-100 text-yellow-700 px-2 py-0.5 rounded-full text-xs font-semibold">TT</span>}
-                          {!recipe.canMake && recipe.missingItems.length>0 && <span className="bg-orange-500 text-white px-2 py-0.5 rounded-full text-xs font-semibold">Need {recipe.missingItems.length}</span>}
-                          <span className="bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full text-xs">{recipe.difficulty}</span>
-                        </div>
-                      </div>
-                      {!recipe.canMake && recipe.missingItems.length>0 && (
-                        <div className="mb-2 p-2 bg-white rounded-lg border border-orange-200">
-                          <p className="text-xs text-orange-700 font-semibold mb-1">Missing:</p>
-                          <div className="flex flex-wrap gap-1">
-                            {recipe.missingItems.map((m,i)=><span key={i} className="bg-orange-100 text-orange-700 px-2 py-0.5 rounded text-xs">{m}</span>)}
-                          </div>
-                        </div>
-                      )}
-                      <div className="flex items-center gap-3 text-xs text-gray-500 mb-3">
-                        <span className="flex items-center gap-1"><Clock size={12}/>{recipe.prep_time} min</span>
-                        <span className="flex items-center gap-1"><Leaf size={12}/>{recipe.calories} cal</span>
-                      </div>
-                      <div className="flex items-center gap-2 mb-3" onClick={e=>e.stopPropagation()}>
-                        <span className="text-xs text-gray-500">Servings:</span>
-                        <button onClick={()=>setServings(p=>({...p,[recipe.id]:Math.max(1,(p[recipe.id]||1)-1)}))} className="w-7 h-7 bg-gray-200 rounded-lg font-bold text-sm hover:bg-gray-300">-</button>
-                        <span className="font-semibold text-sm text-gray-800 min-w-8 text-center">{srvCount}</span>
-                        <button onClick={()=>setServings(p=>({...p,[recipe.id]:Math.min(10,(p[recipe.id]||1)+1)}))} className="w-7 h-7 bg-gray-200 rounded-lg font-bold text-sm hover:bg-gray-300">+</button>
-                      </div>
-                      {recipe.dietary_tags && (
-                        <div className="flex flex-wrap gap-1 mb-1">
-                          {recipe.dietary_tags.split(',').map((t,i)=><span key={i} className="bg-blue-50 text-blue-700 px-2 py-0.5 rounded text-xs">{t.trim()}</span>)}
-                        </div>
-                      )}
-                      {selectedRecipe===recipe.id && (
-                        <div className="mt-4 pt-4 border-t border-gray-200">
-                          <p className="font-semibold text-gray-800 mb-2 text-sm">Ingredients ({srvCount} serving{srvCount>1?'s':''}):</p>
-                          <p className="text-sm text-gray-600 mb-3">{recipe.ingredients}</p>
-                          <p className="font-semibold text-gray-800 mb-2 text-sm">Instructions:</p>
-                          <p className="text-sm text-gray-600 whitespace-pre-line">{recipe.instructions}</p>
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
+
+            <div className="flex flex-wrap gap-2 mb-4">
+              {['','breakfast','lunch','dinner','snack'].map(t => (
+                <button key={t} onClick={() => setMealTypeFilter(t)}
+                  className={`text-xs px-3 py-1 rounded-full border transition-all ${mealTypeFilter === t ? 'bg-blue-500 text-white border-blue-500' : 'text-gray-500 border-gray-200'}`}>
+                  {t === '' ? 'All' : t}
+                </button>
+              ))}
+            </div>
+
+            {filteredRecipes.length === 0 && (
+              <div className="text-center py-12 text-gray-400">
+                <p className="text-4xl mb-2">🍽️</p>
+                <p className="text-sm">No recipes match your filters</p>
               </div>
+            )}
+
+            {filteredRecipes.map(recipe => (
+              <div key={recipe.id} onClick={() => setSelectedRecipe(recipe)}
+                className="bg-white rounded-xl border p-4 mb-2 cursor-pointer hover:border-green-300 transition-all">
+                <div className="flex justify-between items-start">
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="font-medium text-gray-800 text-sm">{recipe.name}</span>
+                      {recipe.is_local === 1 && <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full">🇹🇹 Local</span>}
+                    </div>
+                    <p className="text-xs text-gray-400 mt-1">{recipe.prep_time}min · {recipe.calories}cal · {recipe.difficulty}</p>
+                  </div>
+                  <span className={`text-xs px-2 py-1 rounded-full ${recipe.missingCount === 0 ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'}`}>
+                    {recipe.missingCount === 0 ? 'Can make now' : `Missing ${recipe.missingCount}`}
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* ── ALL RECIPES TAB ── */}
+        {activeTab === 'allrecipes' && (
+          <AllRecipesTab API={API} authHeaders={authHeaders} notify={notify} />
+        )}
+
+        {/* ── MEAL PLANNER TAB ── */}
+        {activeTab === 'mealplan' && (
+          <div>
+            <h2 className="text-base font-bold text-gray-800 mb-3">Weekly meal planner</h2>
+            <div className="flex gap-2 mb-4">
+              <button onClick={generateMealPlan}
+                className="flex-1 bg-green-500 text-white py-2.5 rounded-xl text-sm font-medium">✨ Auto-generate from pantry</button>
+              <button onClick={() => setMealPlanMode(mealPlanMode === 'edit' ? 'view' : 'edit')}
+                className="flex-1 bg-white border text-gray-600 py-2.5 rounded-xl text-sm font-medium">
+                {mealPlanMode === 'edit' ? 'View plan' : '✏️ Build my own'}
+              </button>
+            </div>
+
+            {mealPlan?.pushed_by && (
+              <div className="bg-blue-50 border border-blue-200 rounded-xl p-3 mb-4 text-sm text-blue-700">
+                📅 Your dietitian sent you this meal plan
+              </div>
+            )}
+
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="bg-gray-100 rounded-xl">
+                    <th className="p-2 text-left text-gray-500">Meal</th>
+                    {DAYS.map(d => <th key={d} className="p-2 text-gray-500 capitalize">{d.slice(0,3)}</th>)}
+                  </tr>
+                </thead>
+                <tbody>
+                  {SLOTS.map(slot => (
+                    <tr key={slot} className="border-t">
+                      <td className="p-2 font-medium text-gray-600 capitalize">{slot}</td>
+                      {DAYS.map(day => (
+                        <td key={day} className="p-1">
+                          {mealPlanMode === 'edit' ? (
+                            <select
+                              value={customPlan[day]?.[slot]?.id || ''}
+                              onChange={e => {
+                                const recipe = dbRecipes.find(r => r.id === parseInt(e.target.value));
+                                setCustomPlan(prev => ({ ...prev, [day]: { ...prev[day], [slot]: recipe || null } }));
+                              }}
+                              className="w-full text-xs border rounded p-1">
+                              <option value="">--</option>
+                              {dbRecipes.filter(r => !r.meal_type || r.meal_type.includes(slot)).map(r => (
+                                <option key={r.id} value={r.id}>{r.name}</option>
+                              ))}
+                            </select>
+                          ) : (
+                            <div className={`text-xs p-1 rounded min-h-8 ${customPlan[day]?.[slot] ? 'bg-green-50 text-green-700' : 'text-gray-300'}`}>
+                              {customPlan[day]?.[slot]?.name || '—'}
+                            </div>
+                          )}
+                        </td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {mealPlanMode === 'edit' && (
+              <button onClick={saveMealPlan} className="mt-4 w-full bg-green-500 text-white py-3 rounded-xl font-medium">Save meal plan</button>
             )}
           </div>
         )}
 
-        {activeTab==='stats' && (
-          <div className="space-y-4">
-            <div className="bg-white rounded-2xl shadow-lg p-6">
-              <div className="flex items-center gap-3 mb-4">
-                <Leaf size={24} className="text-green-600"/>
-                <div>
-                  <h2 className="text-lg font-bold text-gray-800">Waste Tracker</h2>
-                  <p className="text-xs text-gray-500">Every item removal is logged here automatically</p>
-                </div>
-              </div>
-              <div className="grid grid-cols-3 gap-3 mb-4">
-                <div className="bg-green-50 rounded-xl p-4 text-center">
-                  <p className="text-3xl font-bold text-green-600">{usedCount}</p>
-                  <p className="text-xs text-gray-500 mt-1">Items Used</p>
-                </div>
-                <div className="bg-red-50 rounded-xl p-4 text-center">
-                  <p className="text-3xl font-bold text-red-500">{wastedCount}</p>
-                  <p className="text-xs text-gray-500 mt-1">Items Wasted</p>
-                </div>
-                <div className="bg-blue-50 rounded-xl p-4 text-center">
-                  <p className="text-3xl font-bold text-blue-600">{saveRate!==null?saveRate+'%':'—'}</p>
-                  <p className="text-xs text-gray-500 mt-1">Save Rate</p>
-                </div>
-              </div>
-              {saveRate!==null && (
-                <div className={'rounded-xl p-4 text-sm font-semibold '+(saveRate>=70?'bg-green-50 border border-green-200 text-green-700':saveRate>=40?'bg-yellow-50 border border-yellow-200 text-yellow-700':'bg-red-50 border border-red-200 text-red-700')}>
-                  {saveRate>=70?'Excellent - you are using most of what you buy!':saveRate>=40?'Good progress - check expiry dates regularly.':'A lot is being wasted - try the recipe suggestions to use items up!'}
-                </div>
-              )}
-              {wasteLog.length===0 && <p className="text-center text-gray-400 text-sm py-4">No activity yet. Remove items from your pantry to start tracking.</p>}
-            </div>
+        {/* ── STATS TAB ── */}
+        {activeTab === 'stats' && (
+          <div>
+            <h2 className="text-base font-bold text-gray-800 mb-4">My stats</h2>
 
-            {wasteLog.length > 0 && (
-              <div className="bg-white rounded-2xl shadow-lg p-6">
-                <h3 className="font-bold text-gray-800 mb-3">Activity Log</h3>
-                <div className="space-y-2 max-h-72 overflow-y-auto">
-                  {[...wasteLog].reverse().map(e => (
-                    <div key={e.id} className={'flex items-center gap-3 p-3 rounded-xl '+(e.action==='used'?'bg-green-50':'bg-red-50')}>
-                      {e.action==='used'?<CheckCircle size={16} className="text-green-500 shrink-0"/>:<XCircle size={16} className="text-red-500 shrink-0"/>}
-                      <span className="text-sm text-gray-700 flex-1">{e.item_name||e.itemName}</span>
-                      <span className={'text-xs font-semibold px-2 py-0.5 rounded-full '+(e.action==='used'?'bg-green-100 text-green-700':'bg-red-100 text-red-700')}>{e.action}</span>
-                      <span className="text-xs text-gray-400 shrink-0">{e.date}</span>
-                    </div>
-                  ))}
+            {/* Rewards */}
+            {rewards && (
+              <div className="bg-gradient-to-r from-yellow-400 to-orange-400 rounded-2xl p-4 mb-4 text-white">
+                <div className="flex justify-between items-center">
+                  <div>
+                    <p className="text-xs opacity-80">Your badge</p>
+                    <p className="text-lg font-bold">{rewards.badge}</p>
+                    <p className="text-xs opacity-80">{rewards.total_points} points</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-xs opacity-80">Next: {rewards.nextBadge?.name || 'Max level!'}</p>
+                    {rewards.nextBadge && <p className="text-xs opacity-80">{rewards.pointsToNext} pts to go</p>}
+                  </div>
+                </div>
+                <div className="mt-3 bg-white bg-opacity-30 rounded-full h-2">
+                  <div className="bg-white rounded-full h-2 transition-all"
+                    style={{ width: rewards.nextBadge ? `${Math.min(100, 100 - (rewards.pointsToNext / rewards.nextBadge?.minPoints * 100))}%` : '100%' }} />
                 </div>
               </div>
             )}
 
-            <div className="bg-white rounded-2xl shadow-lg p-6">
-              <div className="flex items-center justify-between mb-2">
-                <div>
-                  <h3 className="font-bold text-gray-800">Share with Your Dietitian</h3>
-                  <p className="text-xs text-gray-500 mt-0.5">Allow your dietitian to view your pantry and waste data</p>
-                </div>
-                <button onClick={toggleSharing}
-                  className={'relative w-14 h-7 rounded-full transition-colors duration-200 '+(sharingOn?'bg-green-500':'bg-gray-300')}>
-                  <div className={'absolute top-0.5 w-6 h-6 bg-white rounded-full shadow transition-transform duration-200 '+(sharingOn?'translate-x-7':'translate-x-0.5')}/>
+            {/* Save rate */}
+            <div className="grid grid-cols-3 gap-3 mb-4">
+              <div className="bg-green-50 rounded-2xl p-3 text-center">
+                <p className="text-2xl font-bold text-green-600">{stats.used}</p>
+                <p className="text-xs text-green-600">Used</p>
+              </div>
+              <div className="bg-red-50 rounded-2xl p-3 text-center">
+                <p className="text-2xl font-bold text-red-500">{stats.wasted}</p>
+                <p className="text-xs text-red-500">Wasted</p>
+              </div>
+              <div className="bg-blue-50 rounded-2xl p-3 text-center">
+                <p className="text-2xl font-bold text-blue-600">{stats.saveRate}%</p>
+                <p className="text-xs text-blue-600">Save rate</p>
+              </div>
+            </div>
+
+            {stats.saveRate >= 80 && <div className="bg-green-50 border border-green-200 rounded-xl p-3 mb-4 text-sm text-green-700">🌟 Excellent — you are using most of what you buy!</div>}
+            {stats.saveRate >= 50 && stats.saveRate < 80 && <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-3 mb-4 text-sm text-yellow-700">👍 Good progress — keep reducing waste!</div>}
+            {stats.saveRate < 50 && stats.total > 0 && <div className="bg-red-50 border border-red-200 rounded-xl p-3 mb-4 text-sm text-red-700">💡 More than half your items are being wasted — check expiry dates regularly.</div>}
+
+            {/* Goals */}
+            <div className="bg-white rounded-2xl border p-4 mb-4">
+              <div className="flex justify-between items-center mb-3">
+                <h3 className="font-semibold text-gray-700">My goals</h3>
+                <button onClick={() => setShowGoalForm(true)} className="text-xs text-green-600 border border-green-300 px-3 py-1 rounded-lg">
+                  {goals ? 'Edit' : 'Set goals'}
                 </button>
               </div>
-              {sharingOn
-                ? <p className="text-green-700 text-xs bg-green-50 border border-green-200 rounded-lg p-3">Active - your dietitian can see your pantry and waste activity in real time.</p>
-                : <p className="text-gray-400 text-xs">Off - only you can see your data.</p>
-              }
+              {!goals && <p className="text-sm text-gray-400">No goals set yet — tap Set goals to get started</p>}
+              {goals && (
+                <div className="space-y-2">
+                  <div className="flex justify-between items-center">
+                    <p className="text-sm text-gray-600">Waste fewer than {goals.waste_target} items/week</p>
+                    {goalProgress?.progress && (
+                      <span className={`text-xs px-2 py-0.5 rounded-full ${goalProgress.progress.wasteTargetMet ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-600'}`}>
+                        {goalProgress.progress.wasteTargetMet ? '✓ On track' : `${goalProgress.progress.wastedThisWeek} wasted`}
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <p className="text-sm text-gray-600">Use {goals.pantry_use_target}% of pantry items</p>
+                    {goalProgress?.progress && (
+                      <span className={`text-xs px-2 py-0.5 rounded-full ${goalProgress.progress.pantryTargetMet ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'}`}>
+                        {goalProgress.progress.saveRate}% save rate
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <p className="text-sm text-gray-600">Follow meal plan {goals.meal_plan_days_target} days/week</p>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Sharing toggle */}
+            <div className="bg-white rounded-2xl border p-4 mb-4">
+              <div className="flex justify-between items-center">
+                <div>
+                  <p className="font-medium text-gray-700 text-sm">Share with dietitian</p>
+                  <p className="text-xs text-gray-400">Allow your dietitian to view your pantry and waste data</p>
+                </div>
+                <button onClick={toggleSharing}
+                  className={`relative w-12 h-6 rounded-full transition-colors ${sharingOn ? 'bg-green-500' : 'bg-gray-300'}`}>
+                  <span className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-transform ${sharingOn ? 'translate-x-7' : 'translate-x-1'}`} />
+                </button>
+              </div>
+              {sharingOn && <p className="text-xs text-green-600 mt-2 bg-green-50 p-2 rounded-lg">Active — your dietitian can see your pantry and waste data</p>}
+            </div>
+
+            {/* Rewards breakdown */}
+            {rewards && (
+              <div className="bg-white rounded-2xl border p-4 mb-4">
+                <h3 className="font-semibold text-gray-700 mb-3">Activity summary</h3>
+                <div className="grid grid-cols-3 gap-3">
+                  <div className="text-center"><p className="text-xl font-bold text-gray-800">{rewards.items_used_count}</p><p className="text-xs text-gray-400">Items used</p></div>
+                  <div className="text-center"><p className="text-xl font-bold text-gray-800">{rewards.items_wasted_count}</p><p className="text-xs text-gray-400">Items wasted</p></div>
+                  <div className="text-center"><p className="text-xl font-bold text-gray-800">{rewards.recipes_cooked}</p><p className="text-xs text-gray-400">Recipes cooked</p></div>
+                </div>
+              </div>
+            )}
+
+            {/* Activity log */}
+            <div className="bg-white rounded-2xl border p-4">
+              <h3 className="font-semibold text-gray-700 mb-3">Activity log</h3>
+              {wasteLog.slice(0, 10).map((entry, i) => (
+                <div key={i} className={`flex items-center gap-3 py-2 border-b last:border-0`}>
+                  <div className={`w-2 h-2 rounded-full ${entry.action === 'used' ? 'bg-green-400' : 'bg-red-400'}`} />
+                  <span className="text-sm text-gray-700 flex-1">{entry.item_name}</span>
+                  <span className={`text-xs px-2 py-0.5 rounded-full ${entry.action === 'used' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-600'}`}>{entry.action}</span>
+                  <span className="text-xs text-gray-400">{new Date(entry.date).toLocaleDateString()}</span>
+                </div>
+              ))}
+              {wasteLog.length === 0 && <p className="text-sm text-gray-400 text-center py-4">No activity yet</p>}
             </div>
           </div>
         )}
       </div>
+
+      {/* ── MODALS ── */}
+
+      {/* Add item modal */}
+      {showAddForm && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-end justify-center z-50">
+          <div className="bg-white rounded-t-3xl w-full max-w-lg p-6">
+            <h3 className="text-lg font-bold text-gray-800 mb-4">Add pantry item</h3>
+            <div className="space-y-3">
+              <div>
+                <label className="text-sm text-gray-600">Item name</label>
+                <input value={newItem.name} onChange={e => setNewItem({...newItem, name: e.target.value})}
+                  placeholder="e.g. Dasheen, Chicken, Oats"
+                  className="mt-1 w-full border rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-green-500 outline-none" />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-sm text-gray-600">Category</label>
+                  <select value={newItem.category} onChange={e => setNewItem({...newItem, category: e.target.value})}
+                    className="mt-1 w-full border rounded-xl px-3 py-2.5 text-sm focus:ring-2 focus:ring-green-500 outline-none">
+                    {CATEGORIES.map(c => <option key={c}>{c}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="text-sm text-gray-600">Unit</label>
+                  <select value={newItem.unit} onChange={e => setNewItem({...newItem, unit: e.target.value})}
+                    className="mt-1 w-full border rounded-xl px-3 py-2.5 text-sm focus:ring-2 focus:ring-green-500 outline-none">
+                    {['item','kg','g','lb','litre','ml','pack','tin','bottle','bag','bunch'].map(u => <option key={u}>{u}</option>)}
+                  </select>
+                </div>
+              </div>
+              <div>
+                <label className="text-sm text-gray-600">Quantity</label>
+                <input type="number" value={newItem.quantity} onChange={e => setNewItem({...newItem, quantity: e.target.value})}
+                  className="mt-1 w-full border rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-green-500 outline-none" />
+              </div>
+              <div>
+                <label className="text-sm text-gray-600">Expiry date</label>
+                <input type="date" value={newItem.expiryDate} onChange={e => setNewItem({...newItem, expiryDate: e.target.value})}
+                  className="mt-1 w-full border rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-green-500 outline-none" />
+              </div>
+            </div>
+            <div className="flex gap-3 mt-5">
+              <button onClick={() => setShowAddForm(false)} className="flex-1 border rounded-xl py-3 text-gray-600 text-sm">Cancel</button>
+              <button onClick={addItem} className="flex-1 bg-green-500 text-white rounded-xl py-3 text-sm font-medium">Add to pantry</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete confirmation modal */}
+      {pendingDelete && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl w-full max-w-sm p-6">
+            <h3 className="text-lg font-bold text-gray-800 mb-2">Remove {pendingDelete.name}?</h3>
+            <p className="text-sm text-gray-500 mb-5">How did you use this item?</p>
+            <div className="flex gap-3">
+              <button onClick={() => setPendingDelete(null)} className="flex-1 border rounded-xl py-2.5 text-gray-600 text-sm">Cancel</button>
+              <button onClick={() => confirmDelete('wasted')} className="flex-1 bg-red-400 text-white rounded-xl py-2.5 text-sm">Wasted</button>
+              <button onClick={() => confirmDelete('used')} className="flex-1 bg-green-500 text-white rounded-xl py-2.5 text-sm">Used</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Leftover modal */}
+      {showLeftoverForm && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl w-full max-w-sm p-6">
+            <h3 className="text-lg font-bold text-gray-800 mb-2">Log leftover?</h3>
+            <p className="text-sm text-gray-500 mb-4">Did you cook {leftoverItem} and have leftovers? Log them so we can remind you to use them.</p>
+            <input value={leftoverItem} onChange={e => setLeftoverItem(e.target.value)}
+              className="w-full border rounded-xl px-4 py-2.5 text-sm mb-4 focus:ring-2 focus:ring-green-500 outline-none" />
+            <div className="flex gap-3">
+              <button onClick={() => setShowLeftoverForm(false)} className="flex-1 border rounded-xl py-2.5 text-gray-600 text-sm">No leftover</button>
+              <button onClick={logLeftover} className="flex-1 bg-purple-500 text-white rounded-xl py-2.5 text-sm">Log leftover</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Goal form modal */}
+      {showGoalForm && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-end justify-center z-50">
+          <div className="bg-white rounded-t-3xl w-full max-w-lg p-6">
+            <h3 className="text-lg font-bold text-gray-800 mb-4">Set my goals</h3>
+            <div className="space-y-4">
+              <div>
+                <label className="text-sm text-gray-600">Max items wasted per week</label>
+                <input type="number" value={newGoals.wasteTarget} onChange={e => setNewGoals({...newGoals, wasteTarget: parseInt(e.target.value)})}
+                  className="mt-1 w-full border rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-green-500 outline-none" />
+              </div>
+              <div>
+                <label className="text-sm text-gray-600">Target pantry save rate (%)</label>
+                <input type="number" value={newGoals.pantryUseTarget} onChange={e => setNewGoals({...newGoals, pantryUseTarget: parseInt(e.target.value)})}
+                  className="mt-1 w-full border rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-green-500 outline-none" />
+              </div>
+              <div>
+                <label className="text-sm text-gray-600">Meal plan days per week</label>
+                <input type="number" value={newGoals.mealPlanDaysTarget} onChange={e => setNewGoals({...newGoals, mealPlanDaysTarget: parseInt(e.target.value)})}
+                  className="mt-1 w-full border rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-green-500 outline-none" />
+              </div>
+            </div>
+            <div className="flex gap-3 mt-5">
+              <button onClick={() => setShowGoalForm(false)} className="flex-1 border rounded-xl py-3 text-gray-600 text-sm">Cancel</button>
+              <button onClick={saveGoals} className="flex-1 bg-green-500 text-white rounded-xl py-3 text-sm font-medium">Save goals</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Recipe detail modal */}
+      {selectedRecipe && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-end justify-center z-50">
+          <div className="bg-white rounded-t-3xl w-full max-w-lg p-6 max-h-screen overflow-y-auto">
+            <div className="flex justify-between items-start mb-4">
+              <div>
+                <h3 className="text-lg font-bold text-gray-800">{selectedRecipe.name}</h3>
+                <p className="text-xs text-gray-400">{selectedRecipe.prep_time}min · {selectedRecipe.calories}cal · {selectedRecipe.difficulty}</p>
+              </div>
+              <button onClick={() => setSelectedRecipe(null)} className="text-gray-400 text-xl">✕</button>
+            </div>
+            {selectedRecipe.dietary_tags && (
+              <div className="flex flex-wrap gap-1 mb-3">
+                {selectedRecipe.dietary_tags.split(',').map(tag => (
+                  <span key={tag} className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full">{tag.trim()}</span>
+                ))}
+              </div>
+            )}
+            <div className="mb-4">
+              <h4 className="text-sm font-semibold text-gray-700 mb-2">Ingredients</h4>
+              <p className="text-sm text-gray-600">{selectedRecipe.ingredients}</p>
+            </div>
+            <div className="mb-6">
+              <h4 className="text-sm font-semibold text-gray-700 mb-2">Instructions</h4>
+              <p className="text-sm text-gray-600 leading-relaxed">{selectedRecipe.instructions}</p>
+            </div>
+            <button onClick={async () => {
+              await fetch(`${API}/api/recipes/${selectedRecipe.id}/use`, { method: 'POST', headers: authHeaders() });
+              setSelectedRecipe(null);
+              await fetchRewards();
+              notify('Recipe cooked — points awarded!');
+            }} className="w-full bg-green-500 text-white py-3 rounded-xl font-medium">I cooked this!</button>
+          </div>
+        </div>
+      )}
+
+      {/* PDF share modal */}
+      {showPdfOptions && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl w-full max-w-sm p-6">
+            <h3 className="text-lg font-bold text-gray-800 mb-2">Share summary</h3>
+            <p className="text-sm text-gray-500 mb-4">For wellness visits or doctor consultations</p>
+            <div className="space-y-2 mb-5">
+              <p className="text-sm text-gray-600">📦 {items.length} pantry items</p>
+              <p className="text-sm text-gray-600">📊 Save rate: {stats.saveRate}%</p>
+              <p className="text-sm text-gray-600">✅ {stats.used} items used · ❌ {stats.wasted} wasted</p>
+              {rewards && <p className="text-sm text-gray-600">🏅 Badge: {rewards.badge}</p>}
+            </div>
+            <p className="text-xs text-gray-400 mb-4">To save as PDF: use your browser's Print function and select "Save as PDF"</p>
+            <div className="flex gap-3">
+              <button onClick={() => setShowPdfOptions(false)} className="flex-1 border rounded-xl py-2.5 text-gray-600 text-sm">Close</button>
+              <button onClick={() => { setShowPdfOptions(false); window.print(); }}
+                className="flex-1 bg-blue-500 text-white rounded-xl py-2.5 text-sm font-medium">Print / Save PDF</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── BOTTOM NAV ── */}
+      <div className="fixed bottom-0 left-0 right-0 bg-white border-t z-40">
+        <div className="flex max-w-2xl mx-auto">
+
+          <button onClick={() => setActiveTab('pantry')}
+            className={`flex-1 flex flex-col items-center py-3 transition-all ${activeTab === 'pantry' ? 'text-green-600' : 'text-gray-400'}`}>
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
+              <polyline points="9 22 9 12 15 12 15 22"/>
+            </svg>
+            <span className="text-xs mt-0.5 font-medium">Pantry</span>
+            {activeTab === 'pantry' && <div className="w-1 h-1 bg-green-500 rounded-full mt-0.5"/>}
+          </button>
+
+          <button onClick={() => setActiveTab('recipes')}
+            className={`flex-1 flex flex-col items-center py-3 transition-all ${activeTab === 'recipes' ? 'text-green-600' : 'text-gray-400'}`}>
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M6 13.87A4 4 0 0 1 7.41 6a5.11 5.11 0 0 1 1.05-1.54 5 5 0 0 1 7.08 0A5.11 5.11 0 0 1 16.59 6 4 4 0 0 1 18 13.87V21H6Z"/>
+              <line x1="6" y1="17" x2="18" y2="17"/>
+            </svg>n
+            <span className="text-xs mt-0.5 font-medium">Recipes</span>
+            {activeTab === 'recipes' && <div className="w-1 h-1 bg-green-500 rounded-full mt-0.5"/>}
+          </button>
+
+          <button onClick={() => setActiveTab('allrecipes')}
+            className={`flex-1 flex flex-col items-center py-3 transition-all ${activeTab === 'allrecipes' ? 'text-green-600' : 'text-gray-400'}`}>
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="11" cy="11" r="8"/>
+              <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+            </svg>
+            <span className="text-xs mt-0.5 font-medium">Browse</span>
+            {activeTab === 'allrecipes' && <div className="w-1 h-1 bg-green-500 rounded-full mt-0.5"/>}
+          </button>
+
+          <button onClick={() => setActiveTab('mealplan')}
+            className={`flex-1 flex flex-col items-center py-3 transition-all ${activeTab === 'mealplan' ? 'text-green-600' : 'text-gray-400'}`}>
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
+              <line x1="16" y1="2" x2="16" y2="6"/>
+              <line x1="8" y1="2" x2="8" y2="6"/>
+              <line x1="3" y1="10" x2="21" y2="10"/>
+            </svg>
+            <span className="text-xs mt-0.5 font-medium">Planner</span>
+            {activeTab === 'mealplan' && <div className="w-1 h-1 bg-green-500 rounded-full mt-0.5"/>}
+          </button>
+
+          <button onClick={() => setActiveTab('stats')}
+            className={`flex-1 flex flex-col items-center py-3 transition-all ${activeTab === 'stats' ? 'text-green-600' : 'text-gray-400'}`}>
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="18" y1="20" x2="18" y2="10"/>
+              <line x1="12" y1="20" x2="12" y2="4"/>
+              <line x1="6" y1="20" x2="6" y2="14"/>
+            </svg>
+            <span className="text-xs mt-0.5 font-medium">Stats</span>
+            {activeTab === 'stats' && <div className="w-1 h-1 bg-green-500 rounded-full mt-0.5"/>}
+                    </button>
+
+        </div>
+      </div>
+
     </div>
+  );
+}
+
+// ─── All Recipes Tab (separate component)
+function AllRecipesTab({ API, authHeaders, notify }) {
+  const [recipes, setRecipes]         = useState([]);
+  const [search, setSearch]           = useState('');
+  const [mealType, setMealType]       = useState('');
+  const [dietTag, setDietTag]         = useState('');
+  const [selected, setSelected]       = useState(null);
+  const [loading, setLoading]         = useState(true);
+
+  const DIET_TAGS = ['vegan','vegetarian','gluten-free','high-protein','low-salt'];
+
+  useEffect(() => { fetchAll(); }, [search, mealType, dietTag]);
+
+  const fetchAll = async () => {
+    setLoading(true);
+    const params = new URLSearchParams();
+    if (search)   params.append('search', search);
+    if (mealType) params.append('mealType', mealType);
+    if (dietTag)  params.append('dietary', dietTag);
+    const res = await fetch(`${API}/api/recipes?${params}`, { headers: authHeaders() });
+    if (res.ok) setRecipes(await res.json());
+    setLoading(false);
+  };
+
+  return (
+    <div>
+      <h2 className="text-base font-bold text-gray-800 mb-1">All recipes</h2>
+      <p className="text-xs text-gray-400 mb-3">Browse the full database · {recipes.length} recipes</p>
+
+      <input value={search} onChange={e => setSearch(e.target.value)}
+        placeholder="Search by name or ingredient..."
+        className="w-full border rounded-xl px-4 py-2.5 text-sm mb-3 focus:ring-2 focus:ring-green-500 outline-none" />
+
+      <div className="flex flex-wrap gap-2 mb-2">
+        {['','breakfast','lunch','dinner','snack'].map(t => (
+          <button key={t} onClick={() => setMealType(t)}
+            className={`text-xs px-3 py-1 rounded-full border ${mealType === t ? 'bg-blue-500 text-white border-blue-500' : 'text-gray-500 border-gray-200'}`}>
+            {t === '' ? 'All meals' : t}
+          </button>
+        ))}
+      </div>
+
+      <div className="flex flex-wrap gap-2 mb-4">
+        <button onClick={() => setDietTag('')}
+          className={`text-xs px-3 py-1 rounded-full border ${dietTag === '' ? 'bg-green-500 text-white border-green-500' : 'text-gray-500 border-gray-200'}`}>
+          All diets
+        </button>
+        {DIET_TAGS.map(tag => (
+          <button key={tag} onClick={() => setDietTag(dietTag === tag ? '' : tag)}
+            className={`text-xs px-3 py-1 rounded-full border ${dietTag === tag ? 'bg-green-500 text-white border-green-500' : 'text-gray-500 border-gray-200'}`}>
+            {tag}
+          </button>
+        ))}
+      </div>
+
+      {loading && <p className="text-center text-gray-400 py-8">Loading recipes...</p>}
+
+      {!loading && recipes.map(r => (
+        <div key={r.id} onClick={() => setSelected(r)}
+          className="bg-white rounded-xl border p-4 mb-2 cursor-pointer hover:border-green-300">
+          <div className="flex justify-between items-start">
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="font-medium text-sm text-gray-800">{r.name}</span>
+                {r.is_local === 1 && <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full">🇹🇹</span>}
+              </div>
+              <p className="text-xs text-gray-400 mt-1">{r.prep_time}min · {r.calories}cal · {r.difficulty}</p>
+              {r.meal_type && <p className="text-xs text-blue-500 mt-0.5">{r.meal_type}</p>}
+            </div>
+            {r.dietary_tags && (
+              <div className="flex flex-wrap gap-1 max-w-24">
+                {r.dietary_tags.split(',').slice(0,2).map(tag => (
+                  <span key={tag} className="text-xs bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded-full">{tag.trim()}</span>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      ))}
+
+      {!loading && recipes.length === 0 && (
+        <div className="text-center py-12 text-gray-400">
+          <p className="text-4xl mb-2">📖</p>
+          <p className="text-sm">No recipes found</p>
+        </div>
+      )}
+
+      {selected && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-end justify-center z-50">
+          <div className="bg-white rounded-t-3xl w-full max-w-lg p-6 max-h-screen overflow-y-auto">
+            <div className="flex justify-between items-start mb-4">
+              <div>
+                <h3 className="text-lg font-bold text-gray-800">{selected.name}</h3>
+                <p className="text-xs text-gray-400">{selected.prep_time}min · {selected.calories}cal · {selected.difficulty}</p>
+              </div>
+              <button onClick={() => setSelected(null)} className="text-gray-400 text-xl">✕</button>
+            </div>
+            <div className="mb-4">
+              <h4 className="text-sm font-semibold text-gray-700 mb-1">Ingredients</h4>
+              <p className="text-sm text-gray-600">{selected.ingredients}</p>
+            </div>
+            <div>
+              <h4 className="text-sm font-semibold text-gray-700 mb-1">Instructions</h4>
+              <p className="text-sm text-gray-600 leading-relaxed">{selected.instructions}</p>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+// ─── Main App ────────────────────────────────────────────────────────────────
+export default function App() {
+  const [currentUser, setCurrentUser] = useState(null);
+  const [dbRecipes, setDbRecipes]     = useState([]);
+
+  useEffect(() => {
+    const stored = localStorage.getItem('token');
+    if (stored) {
+      try {
+        const payload = JSON.parse(atob(stored.split('.')[1]));
+        if (payload.exp * 1000 > Date.now()) {
+          setCurrentUser({ id: payload.id, name: payload.name, role: payload.role });
+          if (payload.role === 'dietician') fetchRecipesForDietitian();
+        } else {
+          localStorage.removeItem('token');
+        }
+      } catch {
+        localStorage.removeItem('token');
+      }
+    }
+  }, []);
+
+  const fetchRecipesForDietitian = async () => {
+    const res = await fetch(`${API}/api/recipes`, {
+      headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+    });
+    if (res.ok) setDbRecipes(await res.json());
+  };
+
+  const login = async (user) => {
+    setCurrentUser(user);
+    if (user.role === 'dietician') {
+      const res = await fetch(`${API}/api/recipes`, {
+        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+      });
+      if (res.ok) setDbRecipes(await res.json());
+    }
+  };
+
+  const logout = () => {
+    setCurrentUser(null);
+    setDbRecipes([]);
+    localStorage.removeItem('token');
+  };
+
+  if (!currentUser) return <AuthScreen onLogin={login} />;
+
+  if (currentUser.role === 'dietician') {
+    return (
+      <DietitianDashboard
+        currentUser={currentUser}
+        onLogout={logout}
+        dbRecipes={dbRecipes}
+      />
+    );
+  }
+
+  return (
+    <HouseholdDashboard
+      currentUser={currentUser}
+      onLogout={logout}
+    />
   );
 }
