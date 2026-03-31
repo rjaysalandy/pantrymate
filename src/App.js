@@ -783,9 +783,14 @@ function HouseholdDashboard({ currentUser, onLogout }) {
                     </div>
                     <p className="text-xs text-gray-400 mt-1">{recipe.prep_time}min · {recipe.calories}cal · {recipe.difficulty}</p>
                   </div>
-                  <span className={`text-xs px-2 py-1 rounded-full ${recipe.missingCount === 0 ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'}`}>
-                    {recipe.missingCount === 0 ? 'Can make now' : `Missing ${recipe.missingCount}`}
-                  </span>
+                  <div className="text-right">
+                    <span className={`text-xs px-2 py-1 rounded-full ${recipe.missingCount === 0 ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'}`}>
+                      {recipe.missingCount === 0 ? 'Can make now' : `Missing ${recipe.missingCount}`}
+                    </span>
+                    {recipe.missingCount > 0 && recipe.missing?.length > 0 && (
+                      <p className="text-xs text-gray-400 mt-1">{recipe.missing.slice(0, 3).join(', ')}</p>
+                    )}
+                  </div>
                 </div>
               </div>
             ))}
