@@ -1137,7 +1137,7 @@ function HouseholdDashboard({ currentUser, onLogout }) {
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl w-full max-w-sm p-6">
             <h3 className="text-lg font-bold text-gray-800 mb-2">Share summary</h3>
-            <p className="text-sm text-gray-500 mb-4">For wellness visits or doctor consultations</p>
+            <p className="text-sm text-gray-500 mb-4">Share with friends, Dietitian or Nutritionist</p>
             <div className="space-y-2 mb-5">
               <p className="text-sm text-gray-600">📦 {items.length} pantry items</p>
               <p className="text-sm text-gray-600">📊 Save rate: {stats.saveRate}%</p>
