@@ -627,7 +627,7 @@ function HouseholdDashboard({ currentUser, onLogout }) {
       <div className="bg-white border-b px-4 py-3 flex justify-between items-center sticky top-0 z-40">
         <div>
           <h1 onClick={() => setActiveTab('pantry')} className="text-base font-bold text-gray-800 cursor-pointer active:text-green-600">WasteLess PantryMate</h1>
-          <p className="text-xs text-gray-400">{greeting()}, {currentUser.name.split(' ')[0]}! 👋</p>
+          <p className="text-xs text-gray-400">{greeting()}, {currentUser.name?.split(' ')[0] || 'there'}! 👋</p>
         </div>
         <div className="flex items-center gap-2">
           {unreadCount > 0 && (
