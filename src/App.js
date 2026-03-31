@@ -147,6 +147,7 @@ function DietitianDashboard({ currentUser, onLogout, dbRecipes }) {
   const DAYS = ['monday','tuesday','wednesday','thursday','friday','saturday','sunday'];
   const SLOTS = ['breakfast','lunch','dinner','snack'];
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { fetchPatients(); }, []);
 
   const fetchPatients = async () => {
@@ -403,7 +404,6 @@ function HouseholdDashboard({ currentUser, onLogout }) {
   const [aiInsight, setAiInsight]         = useState('');
   const [sharingOn, setSharingOn]         = useState(false);
   const [notifications, setNotifications] = useState([]);
-  const [messages, setMessages]           = useState([]);
   const [showAddForm, setShowAddForm]     = useState(false);
   const [showGoalForm, setShowGoalForm]   = useState(false);
   const [newItem, setNewItem]             = useState({ name:'', category:'Produce', quantity:1, unit:'item', expiryDate:'' });
@@ -419,6 +419,7 @@ function HouseholdDashboard({ currentUser, onLogout }) {
   const [showLeftoverForm, setShowLeftoverForm] = useState(false);
   const [leftoverItem, setLeftoverItem]   = useState('');
   const [showPdfOptions, setShowPdfOptions] = useState(false);
+  const [dismissedRecs, setDismissedRecs] = useState([]);
 
   const DAYS  = ['monday','tuesday','wednesday','thursday','friday','saturday','sunday'];
   const SLOTS = ['breakfast','lunch','dinner','snack'];
@@ -430,18 +431,14 @@ function HouseholdDashboard({ currentUser, onLogout }) {
     setTimeout(() => setNotification(''), 3000);
   }, []);
 
-  useEffect(() => {
-    fetchAll();
-  }, []);
-
   const fetchAll = async () => {
     await Promise.all([
       fetchPantry(), fetchWaste(), fetchRecipes(), fetchLeftovers(),
       fetchGoals(), fetchMealPlan(), fetchRewards(), fetchRecommendations(),
-      fetchSharingStatus(), fetchNotifications(), fetchMessages(), fetchAiInsight()
+      fetchSharingStatus(), fetchNotifications(), fetchAiInsight()
     ]);
   };
-
+  useEffect(() => { fetchAll(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const fetchPantry = async () => {
     const res = await fetch(`${API}/api/pantry`, { headers: authHeaders() });
     if (res.ok) setItems(await res.json());
@@ -487,10 +484,6 @@ function HouseholdDashboard({ currentUser, onLogout }) {
   const fetchNotifications = async () => {
     const res = await fetch(`${API}/api/notifications`, { headers: authHeaders() });
     if (res.ok) setNotifications(await res.json());
-  };
-  const fetchMessages = async () => {
-    const res = await fetch(`${API}/api/messages`, { headers: authHeaders() });
-    if (res.ok) setMessages(await res.json());
   };
 
   const addItem = async () => {
@@ -606,14 +599,6 @@ function HouseholdDashboard({ currentUser, onLogout }) {
 
   const unreadCount = notifications.filter(n => !n.is_read).length;
 
-  // ── Bottom nav tabs ──
-  const tabs = [
-    { id: 'pantry',     label: 'Pantry'  },
-    { id: 'recipes',    label: 'Recipes' },
-    { id: 'allrecipes', label: 'Browse'  },
-    { id: 'mealplan',   label: 'Planner' },
-    { id: 'stats',      label: 'Stats'   },
-  ];
 
   return (
     <div className="min-h-screen bg-gray-50 pb-20">
@@ -655,10 +640,10 @@ function HouseholdDashboard({ currentUser, onLogout }) {
           </div>
         )}
 
-        {/* Smart Recommendations */}
-        {recommendations.length > 0 && (
+        {/* Smart Recommendations — pantry tab only */}
+        {activeTab === 'pantry' && recommendations.filter(r => !dismissedRecs.includes(r.type)).length > 0 && (
           <div className="mb-4 space-y-2">
-            {recommendations.slice(0, 2).map((rec, i) => (
+            {recommendations.filter(r => !dismissedRecs.includes(r.type)).slice(0, 2).map((rec, i) => (
               <div key={i} className="bg-amber-50 border border-amber-200 rounded-xl p-3 flex items-start gap-3">
                 <span style={{flexShrink:0}}>
                   {rec.type === 'expiry_alert' && <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#B45309" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>}
@@ -667,10 +652,12 @@ function HouseholdDashboard({ currentUser, onLogout }) {
                   {rec.type === 'waste_pattern' && <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#B45309" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>}
                   {rec.type === 'shopping_suggestion' && <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#B45309" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></svg>}
                 </span>
-                <div>
+                <div className="flex-1">
                   <p className="text-xs font-semibold text-amber-800">{rec.title}</p>
                   <p className="text-xs text-amber-700">{rec.message}</p>
                 </div>
+                <button onClick={() => setDismissedRecs(prev => [...prev, rec.type])}
+                  className="text-amber-400 hover:text-amber-600 text-sm ml-2">✕</button>
               </div>
             ))}
           </div>
@@ -1242,6 +1229,7 @@ function AllRecipesTab({ API, authHeaders, notify }) {
 
   const DIET_TAGS = ['vegan','vegetarian','gluten-free','high-protein','low-salt'];
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { fetchAll(); }, [search, mealType, dietTag]);
 
   const fetchAll = async () => {
@@ -1347,6 +1335,7 @@ export default function App() {
   const [currentUser, setCurrentUser] = useState(null);
   const [dbRecipes, setDbRecipes]     = useState([]);
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     const stored = localStorage.getItem('token');
     if (stored) {
