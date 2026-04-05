@@ -432,7 +432,6 @@ function HouseholdDashboard({ currentUser, onLogout }) {
   const DIET_TAGS  = ['vegan','vegetarian','gluten-free','high-protein','low-salt','reduced-sugar'];
 
   const suggestTimer = React.useRef(null);
-  const suggestTimer = React.useRef(null);
   const notify = useCallback((msg) => {
     setNotification(msg);
     setTimeout(() => setNotification(''), 3000);
@@ -535,9 +534,9 @@ function HouseholdDashboard({ currentUser, onLogout }) {
       method: 'POST', headers: authHeaders(),
       body: JSON.stringify({
         name: newItem.name.trim(),
-        quantity: newItem.quantity,
-        unit_id: newItem.unit_id || null,
-        category_id: newItem.category_id || null,
+        quantity: parseFloat(newItem.quantity) || 1,
+        unit_id: newItem.unit_id ? parseInt(newItem.unit_id) : null,
+        category_id: newItem.category_id ? parseInt(newItem.category_id) : null,
         expiry_date: newItem.expiryDate || null
       })
     });
@@ -1069,6 +1068,7 @@ function HouseholdDashboard({ currentUser, onLogout }) {
                     }, 300);
                   }}
                   onBlur={() => setTimeout(() => setShowSuggestions(false), 150)}
+                  autoComplete="off"
                   placeholder="e.g. Dasheen, Chicken, Oats"
                   className="mt-1 w-full border rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-green-500 outline-none" />
                 {showSuggestions && suggestions.length > 0 && (
