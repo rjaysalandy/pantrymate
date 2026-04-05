@@ -431,6 +431,8 @@ function HouseholdDashboard({ currentUser, onLogout }) {
   const CATEGORIES = ['Produce','Dairy','Meat','Seafood','Grains','Legumes','Canned','Snacks','Beverages','Condiments','Baking','Oils','Frozen','Cooked/Prepared','Other'];
   const DIET_TAGS  = ['vegan','vegetarian','gluten-free','high-protein','low-salt','reduced-sugar'];
 
+  const suggestTimer = React.useRef(null);
+  const suggestTimer = React.useRef(null);
   const notify = useCallback((msg) => {
     setNotification(msg);
     setTimeout(() => setNotification(''), 3000);
@@ -1057,7 +1059,15 @@ function HouseholdDashboard({ currentUser, onLogout }) {
               <div className="relative">
                 <label className="text-sm text-gray-600">Item name</label>
                 <input value={newItem.name}
-                  onChange={e => { setNewItem({...newItem, name: e.target.value}); fetchSuggestions(e.target.value); setShowSuggestions(true); }}
+                  onChange={e => {
+                    const val = e.target.value;
+                    setNewItem({...newItem, name: val});
+                    clearTimeout(suggestTimer.current);
+                    suggestTimer.current = setTimeout(() => {
+                      fetchSuggestions(val);
+                      setShowSuggestions(true);
+                    }, 300);
+                  }}
                   onBlur={() => setTimeout(() => setShowSuggestions(false), 150)}
                   placeholder="e.g. Dasheen, Chicken, Oats"
                   className="mt-1 w-full border rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-green-500 outline-none" />
