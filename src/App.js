@@ -406,7 +406,12 @@ function HouseholdDashboard({ currentUser, onLogout }) {
   const [notifications, setNotifications] = useState([]);
   const [showAddForm, setShowAddForm]     = useState(false);
   const [showGoalForm, setShowGoalForm]   = useState(false);
-  const [newItem, setNewItem]             = useState({ name:'', category:'Produce', quantity:1, unit:'item', expiryDate:'' });
+  const [newItem, setNewItem]             = useState({ name:'', category_id:'', unit_id:'', quantity:1, expiryDate:'' });
+  const [editItem, setEditItem]           = useState(null);
+  const [units, setUnits]                 = useState([]);
+  const [categories, setCategories]       = useState([]);
+  const [suggestions, setSuggestions]     = useState([]);
+  const [showSuggestions, setShowSuggestions] = useState(false);
   const [newGoals, setNewGoals]           = useState({ wasteTarget:2, pantryUseTarget:80, mealPlanDaysTarget:5 });
   const [pendingDelete, setPendingDelete] = useState(null);
   const [selectedRecipe, setSelectedRecipe] = useState(null);
@@ -424,7 +429,7 @@ function HouseholdDashboard({ currentUser, onLogout }) {
   const DAYS  = ['monday','tuesday','wednesday','thursday','friday','saturday','sunday'];
   const SLOTS = ['breakfast','lunch','dinner','snack'];
   const CATEGORIES = ['Produce','Dairy','Meat','Seafood','Grains','Legumes','Canned','Snacks','Beverages','Condiments','Baking','Oils','Frozen','Cooked/Prepared','Other'];
-  const DIET_TAGS  = ['vegan','vegetarian','gluten-free','high-protein','low-salt'];
+  const DIET_TAGS  = ['vegan','vegetarian','gluten-free','high-protein','low-salt','reduced-sugar'];
 
   const notify = useCallback((msg) => {
     setNotification(msg);
@@ -435,7 +440,8 @@ function HouseholdDashboard({ currentUser, onLogout }) {
     await Promise.all([
       fetchPantry(), fetchWaste(), fetchRecipes(), fetchLeftovers(),
       fetchGoals(), fetchMealPlan(), fetchRewards(), fetchRecommendations(),
-      fetchSharingStatus(), fetchNotifications(), fetchAiInsight()
+      fetchSharingStatus(), fetchNotifications(), fetchAiInsight(),
+      fetchUnits(), fetchCategories()
     ]);
   };
   useEffect(() => { fetchAll(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
@@ -448,7 +454,7 @@ function HouseholdDashboard({ currentUser, onLogout }) {
     if (res.ok) setWasteLog(await res.json());
   };
   const fetchRecipes = async () => {
-    const res = await fetch(`${API}/api/recipes/matched`, { headers: authHeaders() });
+    const res = await fetch(`${API}/api/recipes`, { headers: authHeaders() });
     if (res.ok) setDbRecipes(await res.json());
   };
   const fetchLeftovers = async () => {
@@ -485,15 +491,58 @@ function HouseholdDashboard({ currentUser, onLogout }) {
     const res = await fetch(`${API}/api/notifications`, { headers: authHeaders() });
     if (res.ok) setNotifications(await res.json());
   };
+  const fetchUnits = async () => {
+    const res = await fetch(`${API}/api/units`, { headers: authHeaders() });
+    if (res.ok) setUnits(await res.json());
+  };
+  const fetchCategories = async () => {
+    const res = await fetch(`${API}/api/categories`, { headers: authHeaders() });
+    if (res.ok) setCategories(await res.json());
+  };
+  const fetchSuggestions = async (q) => {
+    if (!q || q.length < 1) { setSuggestions([]); return; }
+    const res = await fetch(`${API}/api/suggestions?q=${encodeURIComponent(q)}`, { headers: authHeaders() });
+    if (res.ok) setSuggestions(await res.json());
+  };
+  const saveEditItem = async () => {
+    if (!editItem) return;
+    if (editItem.expiry_date) {
+      const today = new Date().toISOString().split('T')[0];
+      if (editItem.expiry_date < today) { notify('Expiry date cannot be in the past'); return; }
+    }
+    const res = await fetch(`${API}/api/pantry/${editItem.id}`, {
+      method: 'PATCH', headers: authHeaders(),
+      body: JSON.stringify({
+        name: editItem.name,
+        quantity: editItem.quantity,
+        unit_id: editItem.unit_id || null,
+        category_id: editItem.category_id || null,
+        expiry_date: editItem.expiry_date || null
+      })
+    });
+    if (res.ok) { setEditItem(null); await fetchPantry(); notify('Item updated!'); }
+  };
 
   const addItem = async () => {
     if (!newItem.name.trim()) return;
+    if (newItem.expiryDate) {
+      const today = new Date().toISOString().split('T')[0];
+      if (newItem.expiryDate < today) { notify('Expiry date cannot be in the past'); return; }
+    }
     const res = await fetch(`${API}/api/pantry`, {
-      method: 'POST', headers: authHeaders(), body: JSON.stringify(newItem)
+      method: 'POST', headers: authHeaders(),
+      body: JSON.stringify({
+        name: newItem.name.trim(),
+        quantity: newItem.quantity,
+        unit_id: newItem.unit_id || null,
+        category_id: newItem.category_id || null,
+        expiry_date: newItem.expiryDate || null
+      })
     });
     if (res.ok) {
       setShowAddForm(false);
-      setNewItem({ name:'', category:'Produce', quantity:1, unit:'item', expiryDate:'' });
+      setNewItem({ name:'', category_id:'', unit_id:'', quantity:1, expiryDate:'' });
+      setSuggestions([]);
       await fetchPantry();
       notify('Item added!');
     }
@@ -667,11 +716,11 @@ function HouseholdDashboard({ currentUser, onLogout }) {
         {activeTab === 'pantry' && (
           <div>
             <div className="grid grid-cols-2 gap-3 mb-4">
-              <div className="bg-blue-500 rounded-2xl p-4 text-white">
+              <div className="bg-blue-500 rounded-2xl p-4 text-white text-center">
                 <p className="text-xs opacity-80">Total items</p>
                 <p className="text-3xl font-bold">{items.length}</p>
               </div>
-              <div className="bg-orange-500 rounded-2xl p-4 text-white">
+              <div className="bg-orange-500 rounded-2xl p-4 text-white text-center">
                 <p className="text-xs opacity-80">Expiring soon</p>
                 <p className="text-3xl font-bold">{expiringSoon.length}</p>
               </div>
@@ -679,15 +728,15 @@ function HouseholdDashboard({ currentUser, onLogout }) {
 
             <div className="flex gap-2 mb-4">
               <button onClick={() => setShowAddForm(true)}
-                className="flex-1 bg-green-500 text-white py-3 rounded-xl font-medium text-sm">+ Add item</button>
+                className="flex-1 bg-green-500 text-white py-3 rounded-xl font-medium text-sm flex items-center justify-center gap-2"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>Add item</button>
               <button onClick={scanBarcode}
-                className="flex-1 bg-blue-500 text-white py-3 rounded-xl font-medium text-sm">📷 Scan barcode</button>
+                className="flex-1 bg-blue-500 text-white py-3 rounded-xl font-medium text-sm flex items-center justify-center gap-2"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>Scan barcode</button>
             </div>
 
             {/* Leftovers */}
             {leftovers.length > 0 && (
               <div className="mb-4">
-                <h3 className="text-sm font-semibold text-gray-600 mb-2">♻️ Leftovers</h3>
+                <h3 className="text-sm font-semibold text-gray-600 mb-2 flex items-center gap-1.5"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>Leftovers</h3>
                 {leftovers.map(l => (
                   <div key={l.id} className="bg-purple-50 border border-purple-200 rounded-xl p-3 mb-2 flex justify-between items-center">
                     <div>
@@ -727,10 +776,12 @@ function HouseholdDashboard({ currentUser, onLogout }) {
                       <span className="font-medium text-gray-800 text-sm">{item.name}</span>
                       {badge && <span className={`text-xs px-2 py-0.5 rounded-full ${badge.color}`}>{badge.label}</span>}
                     </div>
-                    <p className="text-xs text-gray-400 mt-0.5">{item.category} · {item.quantity} {item.unit}</p>
+                    <p className="text-xs text-gray-400 mt-0.5">{item.category} · {parseFloat(item.quantity).toFixed(2)} {item.unit}</p>
                   </div>
-                  <button onClick={() => setPendingDelete(item)}
-                    className="w-8 h-8 bg-red-50 text-red-400 rounded-full flex items-center justify-center hover:bg-red-100">✕</button>
+                  <div className="flex gap-1.5">
+                    <button onClick={() => setEditItem(item)} className="w-8 h-8 bg-gray-50 text-gray-400 rounded-full flex items-center justify-center hover:bg-gray-100"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>
+                    <button onClick={() => setPendingDelete(item)} className="w-8 h-8 bg-red-50 text-red-400 rounded-full flex items-center justify-center hover:bg-red-100"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg></button>
+                  </div>
                 </div>
               );
             })}
@@ -767,13 +818,17 @@ function HouseholdDashboard({ currentUser, onLogout }) {
 
             {filteredRecipes.length === 0 && (
               <div className="text-center py-12 text-gray-400">
-                <p className="text-4xl mb-2">🍽️</p>
+                <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round" className="mb-2 mx-auto"><path d="M3 2v7c0 1.1.9 2 2 2h4a2 2 0 0 0 2-2V2"/><path d="M7 2v20"/><path d="M21 15V2a5 5 0 0 0-5 5v6c0 1.1.9 2 2 2h3zm0 0v7"/></svg>
                 <p className="text-sm">No recipes match your filters</p>
               </div>
             )}
 
             {filteredRecipes.map(recipe => (
-              <div key={recipe.id} onClick={() => setSelectedRecipe(recipe)}
+              <div key={recipe.id} onClick={async () => {
+                const res = await fetch(`${API}/api/recipes/${recipe.id}`, { headers: authHeaders() });
+                if (res.ok) setSelectedRecipe({...recipe, ...(await res.json())});
+                else setSelectedRecipe(recipe);
+              }}
                 className="bg-white rounded-xl border p-4 mb-2 cursor-pointer hover:border-green-300 transition-all">
                 <div className="flex justify-between items-start">
                   <div className="flex-1">
@@ -784,11 +839,11 @@ function HouseholdDashboard({ currentUser, onLogout }) {
                     <p className="text-xs text-gray-400 mt-1">{recipe.prep_time}min · {recipe.calories}cal · {recipe.difficulty}</p>
                   </div>
                   <div className="text-right">
-                    <span className={`text-xs px-2 py-1 rounded-full ${recipe.missingCount === 0 ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'}`}>
-                      {recipe.missingCount === 0 ? 'Can make now' : `Missing ${recipe.missingCount}`}
+                    <span className={`text-xs px-2 py-1 rounded-full ${recipe.missing === 0 ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'}`}>
+                      {recipe.missing === 0 ? 'Can make now' : `Missing ${recipe.missing}`}
                     </span>
-                    {recipe.missingCount > 0 && recipe.missing?.length > 0 && (
-                      <p className="text-xs text-gray-400 mt-1">{recipe.missing.slice(0, 3).join(', ')}</p>
+                    {recipe.missing > 0 && recipe.missingItems?.length > 0 && (
+                      <p className="text-xs text-gray-400 mt-1">Need: {recipe.missingItems.slice(0, 3).join(', ')}</p>
                     )}
                   </div>
                 </div>
@@ -808,10 +863,10 @@ function HouseholdDashboard({ currentUser, onLogout }) {
             <h2 className="text-base font-bold text-gray-800 mb-3">Weekly meal planner</h2>
             <div className="flex gap-2 mb-4">
               <button onClick={generateMealPlan}
-                className="flex-1 bg-green-500 text-white py-2.5 rounded-xl text-sm font-medium">✨ Auto-generate from pantry</button>
+                className="flex-1 bg-green-500 text-white py-2.5 rounded-xl text-sm font-medium flex items-center justify-center gap-2"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83"/></svg>Auto-generate from pantry</button>
               <button onClick={() => setMealPlanMode(mealPlanMode === 'edit' ? 'view' : 'edit')}
                 className="flex-1 bg-white border text-gray-600 py-2.5 rounded-xl text-sm font-medium">
-                {mealPlanMode === 'edit' ? 'View plan' : '✏️ Build my own'}
+                <span className="flex items-center justify-center gap-2">{mealPlanMode === 'edit' ? <><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>View plan</> : <><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>Build my own</>}</span>
               </button>
             </div>
 
@@ -909,9 +964,9 @@ function HouseholdDashboard({ currentUser, onLogout }) {
               </div>
             </div>
 
-            {stats.saveRate >= 80 && <div className="bg-green-50 border border-green-200 rounded-xl p-3 mb-4 text-sm text-green-700">🌟 Excellent — you are using most of what you buy!</div>}
-            {stats.saveRate >= 50 && stats.saveRate < 80 && <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-3 mb-4 text-sm text-yellow-700">👍 Good progress — keep reducing waste!</div>}
-            {stats.saveRate < 50 && stats.total > 0 && <div className="bg-red-50 border border-red-200 rounded-xl p-3 mb-4 text-sm text-red-700">💡 More than half your items are being wasted — check expiry dates regularly.</div>}
+            {stats.saveRate >= 80 && <div className="bg-green-50 border border-green-200 rounded-xl p-3 mb-4 text-sm text-green-700">Excellent — you are using most of what you buy!</div>}
+            {stats.saveRate >= 50 && stats.saveRate < 80 && <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-3 mb-4 text-sm text-yellow-700">Good progress — keep reducing waste!</div>}
+            {stats.saveRate < 50 && stats.total > 0 && <div className="bg-red-50 border border-red-200 rounded-xl p-3 mb-4 text-sm text-red-700">More than half your items are being wasted — check expiry dates regularly.</div>}
 
             {/* Goals */}
             <div className="bg-white rounded-2xl border p-4 mb-4">
@@ -999,25 +1054,43 @@ function HouseholdDashboard({ currentUser, onLogout }) {
           <div className="bg-white rounded-t-3xl w-full max-w-lg p-6">
             <h3 className="text-lg font-bold text-gray-800 mb-4">Add pantry item</h3>
             <div className="space-y-3">
-              <div>
+              <div className="relative">
                 <label className="text-sm text-gray-600">Item name</label>
-                <input value={newItem.name} onChange={e => setNewItem({...newItem, name: e.target.value})}
+                <input value={newItem.name}
+                  onChange={e => { setNewItem({...newItem, name: e.target.value}); fetchSuggestions(e.target.value); setShowSuggestions(true); }}
+                  onBlur={() => setTimeout(() => setShowSuggestions(false), 150)}
                   placeholder="e.g. Dasheen, Chicken, Oats"
                   className="mt-1 w-full border rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-green-500 outline-none" />
+                {showSuggestions && suggestions.length > 0 && (
+                  <ul className="absolute z-10 w-full bg-white border rounded-xl shadow-lg mt-1 max-h-40 overflow-y-auto">
+                    {suggestions.map((s, i) => (
+                      <li key={i} className="px-4 py-2 text-sm hover:bg-green-50 cursor-pointer"
+                        onMouseDown={() => { setNewItem({...newItem, name: s}); setSuggestions([]); setShowSuggestions(false); }}>{s}</li>
+                    ))}
+                  </ul>
+                )}
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="text-sm text-gray-600">Category</label>
-                  <select value={newItem.category} onChange={e => setNewItem({...newItem, category: e.target.value})}
+                  <select value={newItem.category_id} onChange={e => setNewItem({...newItem, category_id: e.target.value})}
                     className="mt-1 w-full border rounded-xl px-3 py-2.5 text-sm focus:ring-2 focus:ring-green-500 outline-none">
-                    {CATEGORIES.map(c => <option key={c}>{c}</option>)}
+                    <option value="">Select...</option>
+                    {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                   </select>
                 </div>
                 <div>
                   <label className="text-sm text-gray-600">Unit</label>
-                  <select value={newItem.unit} onChange={e => setNewItem({...newItem, unit: e.target.value})}
+                  <select value={newItem.unit_id} onChange={e => setNewItem({...newItem, unit_id: e.target.value})}
                     className="mt-1 w-full border rounded-xl px-3 py-2.5 text-sm focus:ring-2 focus:ring-green-500 outline-none">
-                    {['item','kg','g','lb','litre','ml','pack','tin','bottle','bag','bunch'].map(u => <option key={u}>{u}</option>)}
+                    <option value="">Select...</option>
+                    {['weight','volume','count','other'].map(grp => (
+                      <optgroup key={grp} label={grp.charAt(0).toUpperCase()+grp.slice(1)}>
+                        {units.filter(u => u.category === grp).map(u => (
+                          <option key={u.id} value={u.id}>{u.name} ({u.abbreviation})</option>
+                        ))}
+                      </optgroup>
+                    ))}
                   </select>
                 </div>
               </div>
@@ -1035,6 +1108,60 @@ function HouseholdDashboard({ currentUser, onLogout }) {
             <div className="flex gap-3 mt-5">
               <button onClick={() => setShowAddForm(false)} className="flex-1 border rounded-xl py-3 text-gray-600 text-sm">Cancel</button>
               <button onClick={addItem} className="flex-1 bg-green-500 text-white rounded-xl py-3 text-sm font-medium">Add to pantry</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit item modal */}
+      {editItem && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-end justify-center z-50">
+          <div className="bg-white rounded-t-3xl w-full max-w-lg p-6">
+            <h3 className="text-lg font-bold text-gray-800 mb-4">Edit item</h3>
+            <div className="space-y-3">
+              <div>
+                <label className="text-sm text-gray-600">Name</label>
+                <input value={editItem.name} onChange={e => setEditItem({...editItem, name: e.target.value})}
+                  className="mt-1 w-full border rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-green-500 outline-none" />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-sm text-gray-600">Category</label>
+                  <select value={editItem.category_id || ''} onChange={e => setEditItem({...editItem, category_id: e.target.value})}
+                    className="mt-1 w-full border rounded-xl px-3 py-2.5 text-sm focus:ring-2 focus:ring-green-500 outline-none">
+                    <option value="">Select...</option>
+                    {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="text-sm text-gray-600">Unit</label>
+                  <select value={editItem.unit_id || ''} onChange={e => setEditItem({...editItem, unit_id: e.target.value})}
+                    className="mt-1 w-full border rounded-xl px-3 py-2.5 text-sm focus:ring-2 focus:ring-green-500 outline-none">
+                    <option value="">Select...</option>
+                    {['weight','volume','count','other'].map(grp => (
+                      <optgroup key={grp} label={grp.charAt(0).toUpperCase()+grp.slice(1)}>
+                        {units.filter(u => u.category === grp).map(u => (
+                          <option key={u.id} value={u.id}>{u.name} ({u.abbreviation})</option>
+                        ))}
+                      </optgroup>
+                    ))}
+                  </select>
+                </div>
+              </div>
+              <div>
+                <label className="text-sm text-gray-600">Quantity</label>
+                <input type="number" value={editItem.quantity} onChange={e => setEditItem({...editItem, quantity: e.target.value})}
+                  className="mt-1 w-full border rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-green-500 outline-none" />
+              </div>
+              <div>
+                <label className="text-sm text-gray-600">Expiry date</label>
+                <input type="date" value={editItem.expiry_date || ''} onChange={e => setEditItem({...editItem, expiry_date: e.target.value})}
+                  className="mt-1 w-full border rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-green-500 outline-none" />
+              </div>
+            </div>
+            <div className="flex gap-3 mt-5">
+              <button onClick={() => setEditItem(null)} className="flex-1 border rounded-xl py-3 text-gray-600 text-sm">Cancel</button>
+              <button onClick={saveEditItem} className="flex-1 bg-green-500 text-white rounded-xl py-3 text-sm font-medium">Save changes</button>
             </div>
           </div>
         </div>
@@ -1110,7 +1237,9 @@ function HouseholdDashboard({ currentUser, onLogout }) {
                 <h3 className="text-lg font-bold text-gray-800">{selectedRecipe.name}</h3>
                 <p className="text-xs text-gray-400">{selectedRecipe.prep_time}min · {selectedRecipe.calories}cal · {selectedRecipe.difficulty}</p>
               </div>
-              <button onClick={() => setSelectedRecipe(null)} className="text-gray-400 text-xl">✕</button>
+              <button onClick={() => setSelectedRecipe(null)} className="text-gray-400 hover:text-gray-600">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+              </button>
             </div>
             {selectedRecipe.dietary_tags && (
               <div className="flex flex-wrap gap-1 mb-3">
@@ -1121,17 +1250,29 @@ function HouseholdDashboard({ currentUser, onLogout }) {
             )}
             <div className="mb-4">
               <h4 className="text-sm font-semibold text-gray-700 mb-2">Ingredients</h4>
-              <p className="text-sm text-gray-600">{selectedRecipe.ingredients}</p>
+              {selectedRecipe.ingredients?.length > 0 ? selectedRecipe.ingredients.map((ing, i) => {
+                const isMissing = selectedRecipe.missingItems?.some(m => ing.ingredient_name?.toLowerCase().includes(m.toLowerCase()) || m.toLowerCase().includes(ing.ingredient_name?.toLowerCase()));
+                return (
+                  <span key={i} className={`inline-block text-sm px-2 py-0.5 rounded-full mr-1 mb-1 ${isMissing ? 'bg-red-100 text-red-700' : 'bg-green-50 text-green-700'}`}>
+                    {ing.quantity > 0 ? `${parseFloat(ing.quantity).toFixed(2)} ${ing.unit || ''} ${ing.ingredient_name}`.trim() : ing.ingredient_name}
+                  </span>
+                );
+              }) : selectedRecipe.ingredients_text?.split(',').map((ing, i) => (
+                <span key={i} className="inline-block text-sm px-2 py-0.5 rounded-full mr-1 mb-1 bg-green-50 text-green-700">{ing.trim()}</span>
+              ))}
             </div>
             <div className="mb-6">
               <h4 className="text-sm font-semibold text-gray-700 mb-2">Instructions</h4>
               <p className="text-sm text-gray-600 leading-relaxed">{selectedRecipe.instructions}</p>
             </div>
             <button onClick={async () => {
-              await fetch(`${API}/api/recipes/${selectedRecipe.id}/use`, { method: 'POST', headers: authHeaders() });
+              const cookRes = await fetch(`${API}/api/recipes/${selectedRecipe.id}/cook`, { method: 'POST', headers: authHeaders() });
+              const cookData = await cookRes.json();
               setSelectedRecipe(null);
+              await fetchPantry();
               await fetchRewards();
-              notify('Recipe cooked — points awarded!');
+              const reduced = cookData.reduced?.length ? ` Pantry updated: ${cookData.reduced.join(', ')}.` : '';
+              notify(`Recipe cooked — points awarded!${reduced}`);
             }} className="w-full bg-green-500 text-white py-3 rounded-xl font-medium">I cooked this!</button>
           </div>
         </div>
@@ -1144,7 +1285,7 @@ function HouseholdDashboard({ currentUser, onLogout }) {
             <h3 className="text-lg font-bold text-gray-800 mb-2">Share summary</h3>
             <p className="text-sm text-gray-500 mb-4">Share with friends, Dietitian or Nutritionist</p>
             <div className="space-y-2 mb-5">
-              <p className="text-sm text-gray-600">📦 {items.length} pantry items</p>
+              <p className="text-sm text-gray-600">{items.length} pantry items</p>
               <p className="text-sm text-gray-600">📊 Save rate: {stats.saveRate}%</p>
               <p className="text-sm text-gray-600">✅ {stats.used} items used · ❌ {stats.wasted} wasted</p>
               {rewards && <p className="text-sm text-gray-600">🏅 Badge: {rewards.badge}</p>}
@@ -1232,7 +1373,7 @@ function AllRecipesTab({ API, authHeaders, notify }) {
   const [selected, setSelected]       = useState(null);
   const [loading, setLoading]         = useState(true);
 
-  const DIET_TAGS = ['vegan','vegetarian','gluten-free','high-protein','low-salt'];
+  const DIET_TAGS = ['vegan','vegetarian','gluten-free','high-protein','low-salt','reduced-sugar'];
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { fetchAll(); }, [search, mealType, dietTag]);
@@ -1306,7 +1447,7 @@ function AllRecipesTab({ API, authHeaders, notify }) {
 
       {!loading && recipes.length === 0 && (
         <div className="text-center py-12 text-gray-400">
-          <p className="text-4xl mb-2">📖</p>
+          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round" className="mb-2 mx-auto"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
           <p className="text-sm">No recipes found</p>
         </div>
       )}
