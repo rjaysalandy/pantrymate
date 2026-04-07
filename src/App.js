@@ -3,21 +3,16 @@ import './App.css';
 
 const API = process.env.REACT_APP_API_URL || 'http://localhost:8080';
 
-// ─── Helpers ───────────────────────────────────────────────────────────────
-function daysLeft(dateStr) {
-  if (!dateStr) return null;
-  const diff = Math.ceil((new Date(dateStr) - new Date()) / 86400000);
-  return diff;
-}
-function expiryBadge(dateStr) {
-  const d = daysLeft(dateStr);
-  if (d === null) return null;
-  if (d < 0)  return { label: 'Expired',      color: 'bg-red-100 text-red-700' };
+function expiryBadge(item) {
+  const d = item?.days_left ?? null;
+  if (d === null || d === undefined) return null;
+  if (d < 0)   return { label: 'Expired',      color: 'bg-red-100 text-red-700' };
   if (d === 0) return { label: 'Expires today', color: 'bg-red-100 text-red-700' };
-  if (d <= 2)  return { label: `${d}d left`,   color: 'bg-amber-100 text-amber-700' };
-  if (d <= 5)  return { label: `${d}d left`,   color: 'bg-yellow-100 text-yellow-700' };
-  return { label: `${d}d left`, color: 'bg-green-100 text-green-700' };
+  if (d <= 2)  return { label: `${d}d left`,    color: 'bg-amber-100 text-amber-700' };
+  if (d <= 5)  return { label: `${d}d left`,    color: 'bg-yellow-100 text-yellow-700' };
+  return       { label: `${d}d left`,           color: 'bg-green-100 text-green-700' };
 }
+
 function greeting() {
   const h = new Date().getHours();
   if (h < 12) return 'Good morning';
@@ -25,6 +20,7 @@ function greeting() {
   if (h < 21) return 'Good evening';
   return 'Good night';
 }
+
 function mealTimeLabel() {
   const h = new Date().getHours();
   if (h < 11) return 'breakfast';
@@ -33,12 +29,12 @@ function mealTimeLabel() {
   if (h < 21) return 'dinner';
   return 'snack';
 }
+
 function token() { return localStorage.getItem('token'); }
 function authHeaders() {
   return { 'Content-Type': 'application/json', Authorization: `Bearer ${token()}` };
 }
 
-// ─── Auth Screen ────────────────────────────────────────────────────────────
 function AuthScreen({ onLogin }) {
   const [mode, setMode]       = useState('login');
   const [name, setName]       = useState('');
@@ -77,7 +73,6 @@ function AuthScreen({ onLogin }) {
           <h1 className="text-2xl font-bold text-gray-800">WasteLess PantryMate</h1>
           <p className="text-gray-500 text-sm mt-1">Smart food management for T&T households</p>
         </div>
-
         <div className="flex bg-gray-100 rounded-xl p-1 mb-6">
           {['login','register'].map(m => (
             <button key={m} onClick={() => setMode(m)}
@@ -86,7 +81,6 @@ function AuthScreen({ onLogin }) {
             </button>
           ))}
         </div>
-
         {mode === 'register' && (
           <div className="mb-4">
             <label className="text-sm font-medium text-gray-700">Full name</label>
@@ -95,14 +89,12 @@ function AuthScreen({ onLogin }) {
               placeholder="Rachel Salandy" />
           </div>
         )}
-
         <div className="mb-4">
           <label className="text-sm font-medium text-gray-700">Email</label>
           <input type="email" value={email} onChange={e => setEmail(e.target.value)}
             className="mt-1 w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 outline-none"
             placeholder="you@example.com" />
         </div>
-
         <div className="mb-4">
           <label className="text-sm font-medium text-gray-700">Password</label>
           <input type="password" value={pass} onChange={e => setPass(e.target.value)}
@@ -110,7 +102,6 @@ function AuthScreen({ onLogin }) {
             className="mt-1 w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 outline-none"
             placeholder="••••••••" />
         </div>
-
         {mode === 'register' && (
           <div className="mb-6">
             <label className="text-sm font-medium text-gray-700">I am registering as</label>
@@ -121,9 +112,7 @@ function AuthScreen({ onLogin }) {
             </select>
           </div>
         )}
-
         {error && <p className="text-red-500 text-sm mb-4 bg-red-50 p-3 rounded-lg">{error}</p>}
-
         <button onClick={submit} disabled={loading}
           className="w-full bg-green-500 hover:bg-green-600 text-white py-3 rounded-xl font-semibold transition-all disabled:opacity-50">
           {loading ? 'Please wait...' : mode === 'login' ? 'Sign In' : 'Create Account'}
@@ -133,22 +122,20 @@ function AuthScreen({ onLogin }) {
   );
 }
 
-// ─── Dietitian Dashboard ─────────────────────────────────────────────────────
-function DietitianDashboard({ currentUser, onLogout, dbRecipes }) {
-  const [patients, setPatients]         = useState([]);
-  const [selected, setSelected]         = useState(null);
-  const [activeTab, setActiveTab]       = useState('overview');
-  const [msgBody, setMsgBody]           = useState('');
+function DietitianDashboard({ currentUser, onLogout, dbRecipes, config }) {
+  const [patients, setPatients]           = useState([]);
+  const [selected, setSelected]           = useState(null);
+  const [activeTab, setActiveTab]         = useState('overview');
+  const [msgBody, setMsgBody]             = useState('');
   const [clinicalNotes, setClinicalNotes] = useState('');
-  const [goal, setGoal]                 = useState('');
-  const [mealPlan, setMealPlan]         = useState({});
-  const [notification, setNotification] = useState('');
+  const [goal, setGoal]                   = useState('');
+  const [mealPlan, setMealPlan]           = useState({});
+  const [notification, setNotification]   = useState('');
 
-  const DAYS = ['monday','tuesday','wednesday','thursday','friday','saturday','sunday'];
-  const SLOTS = ['breakfast','lunch','dinner','snack'];
+  const DAYS  = config.days;
+  const SLOTS = config.mealSlots;
 
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => { fetchPatients(); }, []);
+  useEffect(() => { fetchPatients(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const fetchPatients = async () => {
     const res = await fetch(`${API}/api/sharing/patients`, { headers: authHeaders() });
@@ -197,9 +184,7 @@ function DietitianDashboard({ currentUser, onLogout, dbRecipes }) {
   return (
     <div className="min-h-screen bg-gray-50">
       {notification && (
-        <div className="fixed top-4 right-4 bg-green-500 text-white px-6 py-3 rounded-xl shadow-lg z-50">
-          {notification}
-        </div>
+        <div className="fixed top-4 right-4 bg-green-500 text-white px-6 py-3 rounded-xl shadow-lg z-50">{notification}</div>
       )}
       <div className="bg-white border-b px-6 py-4 flex justify-between items-center">
         <div>
@@ -208,7 +193,6 @@ function DietitianDashboard({ currentUser, onLogout, dbRecipes }) {
         </div>
         <button onClick={onLogout} className="text-sm text-gray-500 hover:text-red-500 px-4 py-2 border rounded-lg">Sign out</button>
       </div>
-
       <div className="flex h-screen">
         <div className="w-64 bg-white border-r p-4 overflow-y-auto">
           <p className="text-xs font-semibold text-gray-400 uppercase mb-3">Patients ({patients.length})</p>
@@ -221,12 +205,9 @@ function DietitianDashboard({ currentUser, onLogout, dbRecipes }) {
             </button>
           ))}
         </div>
-
         <div className="flex-1 p-6 overflow-y-auto">
           {!selected ? (
-            <div className="flex items-center justify-center h-full text-gray-400">
-              <p>Select a patient to view their data</p>
-            </div>
+            <div className="flex items-center justify-center h-full text-gray-400"><p>Select a patient to view their data</p></div>
           ) : (
             <>
               <div className="flex items-center justify-between mb-6">
@@ -240,7 +221,6 @@ function DietitianDashboard({ currentUser, onLogout, dbRecipes }) {
                   </div>
                 )}
               </div>
-
               <div className="flex gap-2 mb-6 flex-wrap">
                 {['overview','messages','mealplan','goals','recipes'].map(t => (
                   <button key={t} onClick={() => setActiveTab(t)}
@@ -249,13 +229,12 @@ function DietitianDashboard({ currentUser, onLogout, dbRecipes }) {
                   </button>
                 ))}
               </div>
-
               {activeTab === 'overview' && (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="bg-white rounded-xl p-4 border">
                     <h3 className="font-semibold text-gray-700 mb-3">Pantry ({selected.items?.length || 0} items)</h3>
                     {selected.items?.slice(0, 8).map((item, i) => {
-                      const badge = expiryBadge(item.expiry_date);
+                      const badge = expiryBadge(item);
                       return (
                         <div key={i} className="flex justify-between items-center py-2 border-b last:border-0">
                           <span className="text-sm text-gray-700">{item.name}</span>
@@ -288,7 +267,6 @@ function DietitianDashboard({ currentUser, onLogout, dbRecipes }) {
                   </div>
                 </div>
               )}
-
               {activeTab === 'messages' && (
                 <div className="bg-white rounded-xl p-4 border">
                   <h3 className="font-semibold text-gray-700 mb-4">Send message to {selected.name}</h3>
@@ -306,7 +284,6 @@ function DietitianDashboard({ currentUser, onLogout, dbRecipes }) {
                   <button onClick={sendMessage} className="mt-2 w-full bg-green-500 text-white py-2 rounded-lg text-sm font-medium">Send message</button>
                 </div>
               )}
-
               {activeTab === 'mealplan' && (
                 <div className="bg-white rounded-xl p-4 border">
                   <h3 className="font-semibold text-gray-700 mb-4">Build meal plan for {selected.name}</h3>
@@ -324,14 +301,10 @@ function DietitianDashboard({ currentUser, onLogout, dbRecipes }) {
                             <td className="p-2 font-medium text-gray-600 capitalize">{slot}</td>
                             {DAYS.map(day => (
                               <td key={day} className="p-1">
-                                <select
-                                  value={mealPlan[day]?.[slot]?.id || ''}
+                                <select value={mealPlan[day]?.[slot]?.id || ''}
                                   onChange={e => {
                                     const recipe = recipes.find(r => r.id === parseInt(e.target.value));
-                                    setMealPlan(prev => ({
-                                      ...prev,
-                                      [day]: { ...prev[day], [slot]: recipe || null }
-                                    }));
+                                    setMealPlan(prev => ({ ...prev, [day]: { ...prev[day], [slot]: recipe || null } }));
                                   }}
                                   className="w-full text-xs border rounded p-1">
                                   <option value="">--</option>
@@ -349,17 +322,15 @@ function DietitianDashboard({ currentUser, onLogout, dbRecipes }) {
                   <button onClick={pushMealPlan} className="mt-4 w-full bg-green-500 text-white py-2 rounded-lg text-sm font-medium">Push meal plan to patient</button>
                 </div>
               )}
-
               {activeTab === 'goals' && (
                 <div className="bg-white rounded-xl p-4 border">
                   <h3 className="font-semibold text-gray-700 mb-4">Set goal for {selected.name}</h3>
                   <textarea value={goal} onChange={e => setGoal(e.target.value)} rows={4}
-                    placeholder="e.g. Reduce waste to under 2 items per week. Follow the meal plan Monday to Friday. Increase vegetable intake."
+                    placeholder="e.g. Reduce waste to under 2 items per week."
                     className="w-full border rounded-lg p-3 text-sm focus:ring-2 focus:ring-green-500 outline-none" />
                   <button onClick={saveRecord} className="mt-3 w-full bg-green-500 text-white py-2 rounded-lg text-sm font-medium">Save goal</button>
                 </div>
               )}
-
               {activeTab === 'recipes' && (
                 <div className="bg-white rounded-xl p-4 border">
                   <h3 className="font-semibold text-gray-700 mb-4">Recommend a recipe to {selected.name}</h3>
@@ -389,47 +360,48 @@ function DietitianDashboard({ currentUser, onLogout, dbRecipes }) {
     </div>
   );
 }
-// ─── Household Dashboard ─────────────────────────────────────────────────────
-function HouseholdDashboard({ currentUser, onLogout }) {
-  const [activeTab, setActiveTab]         = useState('pantry');
-  const [items, setItems]                 = useState([]);
-  const [wasteLog, setWasteLog]           = useState([]);
-  const [dbRecipes, setDbRecipes]         = useState([]);
-  const [leftovers, setLeftovers]         = useState([]);
-  const [goals, setGoals]                 = useState(null);
-  const [goalProgress, setGoalProgress]   = useState(null);
-  const [mealPlan, setMealPlan]           = useState(null);
-  const [rewards, setRewards]             = useState(null);
-  const [recommendations, setRecommendations] = useState([]);
-  const [aiInsight, setAiInsight]         = useState('');
-  const [sharingOn, setSharingOn]         = useState(false);
-  const [notifications, setNotifications] = useState([]);
-  const [showAddForm, setShowAddForm]     = useState(false);
-  const [showGoalForm, setShowGoalForm]   = useState(false);
-  const [newItem, setNewItem]             = useState({ name:'', category_id:'', unit_id:'', quantity:1, expiryDate:'' });
-  const [editItem, setEditItem]           = useState(null);
-  const [units, setUnits]                 = useState([]);
-  const [categories, setCategories]       = useState([]);
-  const [suggestions, setSuggestions]     = useState([]);
-  const [showSuggestions, setShowSuggestions] = useState(false);
-  const [newGoals, setNewGoals]           = useState({ wasteTarget:2, pantryUseTarget:80, mealPlanDaysTarget:5 });
-  const [pendingDelete, setPendingDelete] = useState(null);
-  const [selectedRecipe, setSelectedRecipe] = useState(null);
-  const [dietFilter, setDietFilter]       = useState([]);
-  const [mealTypeFilter, setMealTypeFilter] = useState('');
-  const [recipeSearch, setRecipeSearch]   = useState('');
-  const [notification, setNotification]   = useState('');
-  const [mealPlanMode, setMealPlanMode]   = useState('view');
-  const [customPlan, setCustomPlan]       = useState({});
-  const [showLeftoverForm, setShowLeftoverForm] = useState(false);
-  const [leftoverItem, setLeftoverItem]   = useState('');
-  const [showPdfOptions, setShowPdfOptions] = useState(false);
-  const [dismissedRecs, setDismissedRecs] = useState([]);
 
-  const DAYS  = ['monday','tuesday','wednesday','thursday','friday','saturday','sunday'];
-  const SLOTS = ['breakfast','lunch','dinner','snack'];
-  const CATEGORIES = ['Produce','Dairy','Meat','Seafood','Grains','Legumes','Canned','Snacks','Beverages','Condiments','Baking','Oils','Frozen','Cooked/Prepared','Other'];
-  const DIET_TAGS  = ['vegan','vegetarian','gluten-free','high-protein','low-salt','reduced-sugar'];
+function HouseholdDashboard({ currentUser, onLogout, config }) {
+  const [activeTab, setActiveTab]             = useState('pantry');
+  const [items, setItems]                     = useState([]);
+  const [wasteLog, setWasteLog]               = useState([]);
+  const [dbRecipes, setDbRecipes]             = useState([]);
+  const [leftovers, setLeftovers]             = useState([]);
+  const [goals, setGoals]                     = useState(null);
+  const [goalProgress, setGoalProgress]       = useState(null);
+  const [mealPlan, setMealPlan]               = useState(null);
+  const [rewards, setRewards]                 = useState(null);
+  const [recommendations, setRecommendations] = useState([]);
+  const [aiInsight, setAiInsight]             = useState('');
+  const [sharingOn, setSharingOn]             = useState(false);
+  const [notifications, setNotifications]     = useState([]);
+  const [showAddForm, setShowAddForm]         = useState(false);
+  const [showGoalForm, setShowGoalForm]       = useState(false);
+  const [newItem, setNewItem]                 = useState({ name:'', category_id:'', unit_id:'', quantity:1, expiryDate:'' });
+  const [editItem, setEditItem]               = useState(null);
+  const [units, setUnits]                     = useState([]);
+  const [unitGroups, setUnitGroups]           = useState([]);
+  const [categories, setCategories]           = useState([]);
+  const [suggestions, setSuggestions]         = useState([]);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const [newGoals, setNewGoals]               = useState({ wasteTarget:2, pantryUseTarget:80, mealPlanDaysTarget:5 });
+  const [pendingDelete, setPendingDelete]     = useState(null);
+  const [selectedRecipe, setSelectedRecipe]   = useState(null);
+  const [dietFilter, setDietFilter]           = useState([]);
+  const [mealTypeFilter, setMealTypeFilter]   = useState('');
+  const [recipeSearch, setRecipeSearch]       = useState('');
+  const [notification, setNotification]       = useState('');
+  const [mealPlanMode, setMealPlanMode]       = useState('view');
+  const [customPlan, setCustomPlan]           = useState({});
+  const [showLeftoverForm, setShowLeftoverForm] = useState(false);
+  const [leftoverItem, setLeftoverItem]       = useState('');
+  const [showPdfOptions, setShowPdfOptions]   = useState(false);
+  const [dismissedRecs, setDismissedRecs]     = useState([]);
+
+  const DAYS       = config.days;
+  const SLOTS      = config.mealSlots;
+  const DIET_TAGS  = config.dietTags;
+  const MEAL_TYPES = config.mealTypes;
 
   const suggestTimer = React.useRef(null);
   const notify = useCallback((msg) => {
@@ -446,120 +418,72 @@ function HouseholdDashboard({ currentUser, onLogout }) {
     ]);
   };
   useEffect(() => { fetchAll(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
-  const fetchPantry = async () => {
-    const res = await fetch(`${API}/api/pantry`, { headers: authHeaders() });
-    if (res.ok) setItems(await res.json());
-  };
-  const fetchWaste = async () => {
-    const res = await fetch(`${API}/api/waste`, { headers: authHeaders() });
-    if (res.ok) setWasteLog(await res.json());
-  };
-  const fetchRecipes = async () => {
-    const res = await fetch(`${API}/api/recipes`, { headers: authHeaders() });
-    if (res.ok) setDbRecipes(await res.json());
-  };
-  const fetchLeftovers = async () => {
-    const res = await fetch(`${API}/api/leftovers`, { headers: authHeaders() });
-    if (res.ok) setLeftovers(await res.json());
-  };
+
+  const fetchPantry         = async () => { const r = await fetch(`${API}/api/pantry`,                        { headers: authHeaders() }); if (r.ok) setItems(await r.json()); };
+  const fetchWaste          = async () => { const r = await fetch(`${API}/api/waste`,                         { headers: authHeaders() }); if (r.ok) setWasteLog(await r.json()); };
+  const fetchRecipes        = async () => { const r = await fetch(`${API}/api/recipes`,                       { headers: authHeaders() }); if (r.ok) setDbRecipes(await r.json()); };
+  const fetchLeftovers      = async () => { const r = await fetch(`${API}/api/leftovers`,                     { headers: authHeaders() }); if (r.ok) setLeftovers(await r.json()); };
+  const fetchRewards        = async () => { const r = await fetch(`${API}/api/rewards`,                       { headers: authHeaders() }); if (r.ok) setRewards(await r.json()); };
+  const fetchSharingStatus  = async () => { const r = await fetch(`${API}/api/sharing/status`,                { headers: authHeaders() }); if (r.ok) { const d = await r.json(); setSharingOn(d.sharing_enabled === 1); } };
+  const fetchNotifications  = async () => { const r = await fetch(`${API}/api/notifications`,                 { headers: authHeaders() }); if (r.ok) setNotifications(await r.json()); };
+  const fetchCategories     = async () => { const r = await fetch(`${API}/api/categories`,                    { headers: authHeaders() }); if (r.ok) setCategories(await r.json()); };
+  const fetchRecommendations = async () => { const r = await fetch(`${API}/api/recommendations`,              { headers: authHeaders() }); if (r.ok) { const d = await r.json(); setRecommendations(d.recommendations || []); } };
+  const fetchAiInsight      = async () => { const r = await fetch(`${API}/api/recommendations/ai-insight`,    { headers: authHeaders() }); if (r.ok) { const d = await r.json(); setAiInsight(d.insight || ''); } };
+
   const fetchGoals = async () => {
-    const res = await fetch(`${API}/api/goals`, { headers: authHeaders() });
-    if (res.ok) setGoals(await res.json());
-    const res2 = await fetch(`${API}/api/goals/progress`, { headers: authHeaders() });
-    if (res2.ok) setGoalProgress(await res2.json());
+    const r  = await fetch(`${API}/api/goals`,          { headers: authHeaders() }); if (r.ok)  setGoals(await r.json());
+    const r2 = await fetch(`${API}/api/goals/progress`, { headers: authHeaders() }); if (r2.ok) setGoalProgress(await r2.json());
   };
+
   const fetchMealPlan = async () => {
-    const res = await fetch(`${API}/api/mealplanner`, { headers: authHeaders() });
-    if (res.ok) { const d = await res.json(); setMealPlan(d); if (d?.plan_data) setCustomPlan(d.plan_data); }
+    const r = await fetch(`${API}/api/mealplanner`, { headers: authHeaders() });
+    if (r.ok) { const d = await r.json(); setMealPlan(d); if (d?.plan_data) setCustomPlan(d.plan_data); }
   };
-  const fetchRewards = async () => {
-    const res = await fetch(`${API}/api/rewards`, { headers: authHeaders() });
-    if (res.ok) setRewards(await res.json());
-  };
-  const fetchRecommendations = async () => {
-    const res = await fetch(`${API}/api/recommendations`, { headers: authHeaders() });
-    if (res.ok) { const d = await res.json(); setRecommendations(d.recommendations || []); }
-  };
-  const fetchAiInsight = async () => {
-    const res = await fetch(`${API}/api/recommendations/ai-insight`, { headers: authHeaders() });
-    if (res.ok) { const d = await res.json(); setAiInsight(d.insight || ''); }
-  };
-  const fetchSharingStatus = async () => {
-    const res = await fetch(`${API}/api/sharing/status`, { headers: authHeaders() });
-    if (res.ok) { const d = await res.json(); setSharingOn(d.sharing_enabled === 1); }
-  };
-  const fetchNotifications = async () => {
-    const res = await fetch(`${API}/api/notifications`, { headers: authHeaders() });
-    if (res.ok) setNotifications(await res.json());
-  };
+
   const fetchUnits = async () => {
-    const res = await fetch(`${API}/api/units`, { headers: authHeaders() });
-    if (res.ok) setUnits(await res.json());
+    const r = await fetch(`${API}/api/units`, { headers: authHeaders() });
+    if (r.ok) {
+      const data = await r.json();
+      setUnits(data);
+      setUnitGroups([...new Set(data.map(u => u.category).filter(Boolean))]);
+    }
   };
-  const fetchCategories = async () => {
-    const res = await fetch(`${API}/api/categories`, { headers: authHeaders() });
-    if (res.ok) setCategories(await res.json());
-  };
+
   const fetchSuggestions = async (q) => {
     if (!q || q.length < 1) { setSuggestions([]); return; }
-    const res = await fetch(`${API}/api/suggestions?q=${encodeURIComponent(q)}`, { headers: authHeaders() });
-    if (res.ok) setSuggestions(await res.json());
+    const r = await fetch(`${API}/api/suggestions?q=${encodeURIComponent(q)}`, { headers: authHeaders() });
+    if (r.ok) setSuggestions(await r.json());
   };
+
   const saveEditItem = async () => {
     if (!editItem) return;
-    if (editItem.expiry_date) {
-      const today = new Date().toISOString().split('T')[0];
-      if (editItem.expiry_date < today) { notify('Expiry date cannot be in the past'); return; }
+    if (editItem.expiry_date && editItem.expiry_date < new Date().toISOString().split('T')[0]) {
+      notify('Expiry date cannot be in the past'); return;
     }
-    const res = await fetch(`${API}/api/pantry/${editItem.id}`, {
+    const r = await fetch(`${API}/api/pantry/${editItem.id}`, {
       method: 'PATCH', headers: authHeaders(),
-      body: JSON.stringify({
-        name: editItem.name,
-        quantity: editItem.quantity,
-        unit_id: editItem.unit_id || null,
-        category_id: editItem.category_id || null,
-        expiry_date: editItem.expiry_date || null
-      })
+      body: JSON.stringify({ name: editItem.name, quantity: editItem.quantity, unit_id: editItem.unit_id || null, category_id: editItem.category_id || null, expiry_date: editItem.expiry_date || null })
     });
-    if (res.ok) { setEditItem(null); await fetchPantry(); notify('Item updated!'); }
+    if (r.ok) { setEditItem(null); await fetchPantry(); notify('Item updated!'); }
   };
 
   const addItem = async () => {
     if (!newItem.name.trim()) return;
-    if (newItem.expiryDate) {
-      const today = new Date().toISOString().split('T')[0];
-      if (newItem.expiryDate < today) { notify('Expiry date cannot be in the past'); return; }
+    if (newItem.expiryDate && newItem.expiryDate < new Date().toISOString().split('T')[0]) {
+      notify('Expiry date cannot be in the past'); return;
     }
-    const res = await fetch(`${API}/api/pantry`, {
+    const r = await fetch(`${API}/api/pantry`, {
       method: 'POST', headers: authHeaders(),
-      body: JSON.stringify({
-        name: newItem.name.trim(),
-        quantity: parseFloat(newItem.quantity) || 1,
-        unit_id: newItem.unit_id ? parseInt(newItem.unit_id) : null,
-        category_id: newItem.category_id ? parseInt(newItem.category_id) : null,
-        expiry_date: newItem.expiryDate || null
-      })
+      body: JSON.stringify({ name: newItem.name.trim(), quantity: parseFloat(newItem.quantity) || 1, unit_id: newItem.unit_id ? parseInt(newItem.unit_id) : null, category_id: newItem.category_id ? parseInt(newItem.category_id) : null, expiry_date: newItem.expiryDate || null })
     });
-    if (res.ok) {
-      setShowAddForm(false);
-      setNewItem({ name:'', category_id:'', unit_id:'', quantity:1, expiryDate:'' });
-      setSuggestions([]);
-      await fetchPantry();
-      notify('Item added!');
-    }
+    if (r.ok) { setShowAddForm(false); setNewItem({ name:'', category_id:'', unit_id:'', quantity:1, expiryDate:'' }); setSuggestions([]); await fetchPantry(); notify('Item added!'); }
   };
 
   const confirmDelete = async (action) => {
     if (!pendingDelete) return;
-    await fetch(`${API}/api/waste`, {
-      method: 'POST', headers: authHeaders(),
-      body: JSON.stringify({ itemName: pendingDelete.name, action })
-    });
-    await fetch(`${API}/api/pantry/${pendingDelete.id}`, { method: 'DELETE', headers: authHeaders() });
-    if (action === 'used') {
-      setShowLeftoverForm(true);
-      setLeftoverItem(pendingDelete.name);
-    }
+    await fetch(`${API}/api/waste`,                        { method: 'POST',   headers: authHeaders(), body: JSON.stringify({ itemName: pendingDelete.name, action }) });
+    await fetch(`${API}/api/pantry/${pendingDelete.id}`,   { method: 'DELETE', headers: authHeaders() });
+    if (action === 'used') { setShowLeftoverForm(true); setLeftoverItem(pendingDelete.name); }
     setPendingDelete(null);
     await fetchPantry(); await fetchWaste(); await fetchRewards();
     notify(action === 'used' ? 'Logged as used!' : 'Logged as wasted');
@@ -567,121 +491,100 @@ function HouseholdDashboard({ currentUser, onLogout }) {
 
   const logLeftover = async () => {
     if (!leftoverItem.trim()) return;
-    await fetch(`${API}/api/leftovers`, {
-      method: 'POST', headers: authHeaders(),
-      body: JSON.stringify({ itemName: leftoverItem })
-    });
+    await fetch(`${API}/api/leftovers`, { method: 'POST', headers: authHeaders(), body: JSON.stringify({ itemName: leftoverItem }) });
     setShowLeftoverForm(false); setLeftoverItem('');
-    await fetchLeftovers();
-    notify('Leftover logged!');
+    await fetchLeftovers(); notify('Leftover logged!');
   };
 
   const resolveLeftover = async (id, outcome) => {
-    await fetch(`${API}/api/leftovers/${id}/resolve`, {
-      method: 'PATCH', headers: authHeaders(), body: JSON.stringify({ outcome })
-    });
-    await fetchLeftovers(); await fetchWaste();
-    notify(`Leftover marked as ${outcome}`);
+    await fetch(`${API}/api/leftovers/${id}/resolve`, { method: 'PATCH', headers: authHeaders(), body: JSON.stringify({ outcome }) });
+    await fetchLeftovers(); await fetchWaste(); notify(`Leftover marked as ${outcome}`);
   };
 
   const toggleSharing = async () => {
-    const newState = !sharingOn;
-    setSharingOn(newState);
-    await fetch(`${API}/api/sharing/toggle`, {
-      method: 'POST', headers: authHeaders(),
-      body: JSON.stringify({ enabled: newState })
-    });
+    const next = !sharingOn; setSharingOn(next);
+    await fetch(`${API}/api/sharing/toggle`, { method: 'POST', headers: authHeaders(), body: JSON.stringify({ enabled: next }) });
   };
 
   const saveGoals = async () => {
-    await fetch(`${API}/api/goals`, {
-      method: 'POST', headers: authHeaders(), body: JSON.stringify(newGoals)
-    });
-    setShowGoalForm(false); await fetchGoals();
-    notify('Goals saved!');
+    await fetch(`${API}/api/goals`, { method: 'POST', headers: authHeaders(), body: JSON.stringify(newGoals) });
+    setShowGoalForm(false); await fetchGoals(); notify('Goals saved!');
   };
 
   const generateMealPlan = async () => {
-    const res = await fetch(`${API}/api/mealplanner/generate`, { method: 'POST', headers: authHeaders() });
-    if (res.ok) {
-      const d = await res.json();
+    const r = await fetch(`${API}/api/mealplanner/generate`, { method: 'POST', headers: authHeaders() });
+    if (r.ok) {
+      const d = await r.json();
       setCustomPlan(d.planData);
-      await fetch(`${API}/api/mealplanner`, {
-        method: 'POST', headers: authHeaders(),
-        body: JSON.stringify({ planData: d.planData })
-      });
-      await fetchMealPlan();
-      notify('Meal plan generated!');
+      await fetch(`${API}/api/mealplanner`, { method: 'POST', headers: authHeaders(), body: JSON.stringify({ planData: d.planData }) });
+      await fetchMealPlan(); notify('Meal plan generated!');
     }
   };
 
   const saveMealPlan = async () => {
-    await fetch(`${API}/api/mealplanner`, {
-      method: 'POST', headers: authHeaders(), body: JSON.stringify({ planData: customPlan })
-    });
+    await fetch(`${API}/api/mealplanner`, { method: 'POST', headers: authHeaders(), body: JSON.stringify({ planData: customPlan }) });
     await fetchMealPlan(); notify('Meal plan saved!');
   };
 
   const scanBarcode = async () => {
-    const res = await fetch(`${API}/api/barcode/scan`, { headers: authHeaders() });
-    if (res.ok) {
-      const item = await res.json();
-      setNewItem({ name: item.name, category: item.category, quantity: item.quantity, unit: item.unit, expiryDate: item.expiryDate });
-      setShowAddForm(true);
-    }
+    const r = await fetch(`${API}/api/barcode/scan`, { headers: authHeaders() });
+    if (r.ok) { const item = await r.json(); setNewItem({ name: item.name, category: item.category, quantity: item.quantity, unit: item.unit, expiryDate: item.expiryDate }); setShowAddForm(true); }
   };
 
   const stats = {
-    total: wasteLog.length,
-    used: wasteLog.filter(w => w.action === 'used').length,
-    wasted: wasteLog.filter(w => w.action === 'wasted').length,
+    total:    wasteLog.length,
+    used:     wasteLog.filter(w => w.action === 'used').length,
+    wasted:   wasteLog.filter(w => w.action === 'wasted').length,
     saveRate: wasteLog.length > 0 ? Math.round((wasteLog.filter(w => w.action === 'used').length / wasteLog.length) * 100) : 0
   };
 
-  const expiringSoon = items.filter(i => i.expiry_date && daysLeft(i.expiry_date) !== null && daysLeft(i.expiry_date) <= 3);
+  const expiringSoon   = items.filter(i => i.days_left !== null && i.days_left !== undefined && i.days_left <= 3);
+  const unreadCount    = notifications.filter(n => !n.is_read).length;
 
   const filteredRecipes = dbRecipes.filter(r => {
-    const matchDiet = dietFilter.length === 0 || dietFilter.every(f => r.dietary_tags?.includes(f));
-    const matchMeal = !mealTypeFilter || r.meal_type?.includes(mealTypeFilter);
-    const matchSearch = !recipeSearch || r.name?.toLowerCase().includes(recipeSearch.toLowerCase()) || r.ingredients?.toLowerCase().includes(recipeSearch.toLowerCase());
+    const matchDiet   = dietFilter.length === 0 || dietFilter.every(f => r.dietary_tags?.includes(f));
+    const matchMeal   = !mealTypeFilter || r.meal_type?.includes(mealTypeFilter);
+    const matchSearch = !recipeSearch || r.name?.toLowerCase().includes(recipeSearch.toLowerCase()) || r.missingItems?.some(m => m.toLowerCase().includes(recipeSearch.toLowerCase()));
     return matchDiet && matchMeal && matchSearch;
   });
 
-  const unreadCount = notifications.filter(n => !n.is_read).length;
-
+  const UnitSelect = ({ value, onChange, className }) => (
+    <select value={value} onChange={onChange} className={className}>
+      <option value="">Select...</option>
+      {unitGroups.map(grp => (
+        <optgroup key={grp} label={grp.charAt(0).toUpperCase() + grp.slice(1)}>
+          {units.filter(u => u.category === grp).map(u => (
+            <option key={u.id} value={u.id}>{u.name} ({u.abbreviation})</option>
+          ))}
+        </optgroup>
+      ))}
+    </select>
+  );
 
   return (
     <div className="min-h-screen bg-gray-50 pb-20">
       {notification && (
-        <div className="fixed top-4 right-4 bg-green-500 text-white px-6 py-3 rounded-xl shadow-lg z-50 animate-pulse">
-          {notification}
-        </div>
+        <div className="fixed top-4 right-4 bg-green-500 text-white px-6 py-3 rounded-xl shadow-lg z-50 animate-pulse">{notification}</div>
       )}
 
-      {/* Header */}
       <div className="bg-white border-b px-4 py-3 flex justify-between items-center sticky top-0 z-40">
         <div>
           <h1 onClick={() => setActiveTab('pantry')} className="text-base font-bold text-gray-800 cursor-pointer active:text-green-600">WasteLess PantryMate</h1>
           <p className="text-xs text-gray-400">{greeting()}, {currentUser.name?.split(' ')[0] || 'there'}! 👋</p>
         </div>
         <div className="flex items-center gap-2">
-          {unreadCount > 0 && (
-            <span className="bg-red-500 text-white text-xs w-5 h-5 rounded-full flex items-center justify-center">{unreadCount}</span>
-          )}
-          <button onClick={() => setShowPdfOptions(true)}
-            className="text-xs bg-blue-50 text-blue-600 px-3 py-1.5 rounded-lg border border-blue-200">Share PDF</button>
+          {unreadCount > 0 && <span className="bg-red-500 text-white text-xs w-5 h-5 rounded-full flex items-center justify-center">{unreadCount}</span>}
+          <button onClick={() => setShowPdfOptions(true)} className="text-xs bg-blue-50 text-blue-600 px-3 py-1.5 rounded-lg border border-blue-200">Share PDF</button>
           <button onClick={onLogout} className="text-xs text-gray-400 hover:text-red-500 px-2 py-1.5 border rounded-lg">Out</button>
         </div>
       </div>
 
-      {/* Main content */}
       <div className="max-w-2xl mx-auto px-4 pt-4">
 
-        {/* AI Insight Card */}
         {aiInsight && (
           <div className="bg-gradient-to-r from-green-50 to-emerald-50 border border-green-200 rounded-2xl p-4 mb-4">
             <div className="flex items-start gap-3">
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#1D9E75" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="10" rx="2"/><circle cx="12" cy="5" r="2"/><path d="M12 7v4"/><line x1="8" y1="15" x2="8" y2="15"/><line x1="16" y1="15" x2="16" y2="15"/><path d="M8 15h.01M16 15h.01"/><line x1="3" y1="16" x2="1" y2="16"/><line x1="21" y1="16" x2="23" y2="16"/></svg>
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#1D9E75" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="10" rx="2"/><circle cx="12" cy="5" r="2"/><path d="M12 7v4"/><path d="M8 15h.01M16 15h.01"/><line x1="3" y1="16" x2="1" y2="16"/><line x1="21" y1="16" x2="23" y2="16"/></svg>
               <div>
                 <p className="text-xs font-semibold text-green-700 mb-1">Smart insight</p>
                 <p className="text-sm text-green-800 leading-relaxed">{aiInsight}</p>
@@ -690,30 +593,20 @@ function HouseholdDashboard({ currentUser, onLogout }) {
           </div>
         )}
 
-        {/* Smart Recommendations — pantry tab only */}
         {activeTab === 'pantry' && recommendations.filter(r => !dismissedRecs.includes(r.type)).length > 0 && (
           <div className="mb-4 space-y-2">
             {recommendations.filter(r => !dismissedRecs.includes(r.type)).slice(0, 2).map((rec, i) => (
               <div key={i} className="bg-amber-50 border border-amber-200 rounded-xl p-3 flex items-start gap-3">
-                <span style={{flexShrink:0}}>
-                  {rec.type === 'expiry_alert' && <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#B45309" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>}
-                  {rec.type === 'meal_suggestion' && <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#B45309" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M6 13.87A4 4 0 0 1 7.41 6a5.11 5.11 0 0 1 1.05-1.54 5 5 0 0 1 7.08 0A5.11 5.11 0 0 1 16.59 6 4 4 0 0 1 18 13.87V21H6Z"/><line x1="6" y1="17" x2="18" y2="17"/></svg>}
-                  {rec.type === 'leftover_reminder' && <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#B45309" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>}
-                  {rec.type === 'waste_pattern' && <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#B45309" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>}
-                  {rec.type === 'shopping_suggestion' && <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#B45309" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></svg>}
-                </span>
                 <div className="flex-1">
                   <p className="text-xs font-semibold text-amber-800">{rec.title}</p>
                   <p className="text-xs text-amber-700">{rec.message}</p>
                 </div>
-                <button onClick={() => setDismissedRecs(prev => [...prev, rec.type])}
-                  className="text-amber-400 hover:text-amber-600 text-sm ml-2">✕</button>
+                <button onClick={() => setDismissedRecs(prev => [...prev, rec.type])} className="text-amber-400 hover:text-amber-600 text-sm ml-2">✕</button>
               </div>
             ))}
           </div>
         )}
 
-        {/* ── PANTRY TAB ── */}
         {activeTab === 'pantry' && (
           <div>
             <div className="grid grid-cols-2 gap-3 mb-4">
@@ -726,18 +619,15 @@ function HouseholdDashboard({ currentUser, onLogout }) {
                 <p className="text-3xl font-bold">{expiringSoon.length}</p>
               </div>
             </div>
-
             <div className="flex gap-2 mb-4">
-              <button onClick={() => setShowAddForm(true)}
-                className="flex-1 bg-green-500 text-white py-3 rounded-xl font-medium text-sm flex items-center justify-center gap-2"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>Add item</button>
-              <button onClick={scanBarcode}
-                className="flex-1 bg-blue-500 text-white py-3 rounded-xl font-medium text-sm flex items-center justify-center gap-2"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>Scan barcode</button>
+              <button onClick={() => setShowAddForm(true)} className="flex-1 bg-green-500 text-white py-3 rounded-xl font-medium text-sm flex items-center justify-center gap-2">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>Add item</button>
+              <button onClick={scanBarcode} className="flex-1 bg-blue-500 text-white py-3 rounded-xl font-medium text-sm flex items-center justify-center gap-2">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>Scan barcode</button>
             </div>
-
-            {/* Leftovers */}
             {leftovers.length > 0 && (
               <div className="mb-4">
-                <h3 className="text-sm font-semibold text-gray-600 mb-2 flex items-center gap-1.5"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>Leftovers</h3>
+                <h3 className="text-sm font-semibold text-gray-600 mb-2">Leftovers</h3>
                 {leftovers.map(l => (
                   <div key={l.id} className="bg-purple-50 border border-purple-200 rounded-xl p-3 mb-2 flex justify-between items-center">
                     <div>
@@ -745,31 +635,17 @@ function HouseholdDashboard({ currentUser, onLogout }) {
                       <p className="text-xs text-purple-500">Cooked {new Date(l.cooked_date).toLocaleDateString()}</p>
                     </div>
                     <div className="flex gap-2">
-                      <button onClick={() => resolveLeftover(l.id, 'used')}
-                        className="text-xs bg-green-500 text-white px-2 py-1 rounded-lg">Used</button>
-                      <button onClick={() => resolveLeftover(l.id, 'wasted')}
-                        className="text-xs bg-red-400 text-white px-2 py-1 rounded-lg">Wasted</button>
+                      <button onClick={() => resolveLeftover(l.id, 'used')} className="text-xs bg-green-500 text-white px-2 py-1 rounded-lg">Used</button>
+                      <button onClick={() => resolveLeftover(l.id, 'wasted')} className="text-xs bg-red-400 text-white px-2 py-1 rounded-lg">Wasted</button>
                     </div>
                   </div>
                 ))}
               </div>
             )}
-
-            {/* Pantry list */}
             <h3 className="text-sm font-semibold text-gray-600 mb-2">Pantry inventory</h3>
-            {items.length === 0 && (
-              <div className="text-center py-12 text-gray-400">
-                <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round" className="mb-2 mx-auto">
-                  <path d="M20 7H4a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2z"/>
-                  <path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/>
-                  <line x1="12" y1="12" x2="12" y2="16"/>
-                  <line x1="10" y1="14" x2="14" y2="14"/>
-                </svg>
-                <p className="text-sm">Your pantry is empty — add your first item!</p>
-              </div>
-            )}
+            {items.length === 0 && <div className="text-center py-12 text-gray-400"><p className="text-sm">Your pantry is empty — add your first item!</p></div>}
             {items.map(item => {
-              const badge = expiryBadge(item.expiry_date);
+              const badge = expiryBadge(item);
               return (
                 <div key={item.id} className="bg-white rounded-xl border p-4 mb-2 flex justify-between items-center">
                   <div>
@@ -780,8 +656,10 @@ function HouseholdDashboard({ currentUser, onLogout }) {
                     <p className="text-xs text-gray-400 mt-0.5">{item.category} · {parseFloat(item.quantity).toFixed(2)} {item.unit}</p>
                   </div>
                   <div className="flex gap-1.5">
-                    <button onClick={() => setEditItem(item)} className="w-8 h-8 bg-gray-50 text-gray-400 rounded-full flex items-center justify-center hover:bg-gray-100"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>
-                    <button onClick={() => setPendingDelete(item)} className="w-8 h-8 bg-red-50 text-red-400 rounded-full flex items-center justify-center hover:bg-red-100"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg></button>
+                    <button onClick={() => setEditItem(item)} className="w-8 h-8 bg-gray-50 text-gray-400 rounded-full flex items-center justify-center hover:bg-gray-100">
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>
+                    <button onClick={() => setPendingDelete(item)} className="w-8 h-8 bg-red-50 text-red-400 rounded-full flex items-center justify-center hover:bg-red-100">
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg></button>
                   </div>
                 </div>
               );
@@ -789,16 +667,12 @@ function HouseholdDashboard({ currentUser, onLogout }) {
           </div>
         )}
 
-        {/* ── RECIPES TAB ── */}
         {activeTab === 'recipes' && (
           <div>
             <h2 className="text-base font-bold text-gray-800 mb-1">Recipe suggestions</h2>
             <p className="text-xs text-gray-400 mb-3">Based on your pantry · {mealTimeLabel()} time</p>
-
-            <input value={recipeSearch} onChange={e => setRecipeSearch(e.target.value)}
-              placeholder="Search recipes or ingredients..."
+            <input value={recipeSearch} onChange={e => setRecipeSearch(e.target.value)} placeholder="Search recipes or ingredients..."
               className="w-full border rounded-xl px-4 py-2.5 text-sm mb-3 focus:ring-2 focus:ring-green-500 outline-none" />
-
             <div className="flex flex-wrap gap-2 mb-3">
               {DIET_TAGS.map(tag => (
                 <button key={tag} onClick={() => setDietFilter(prev => prev.includes(tag) ? prev.filter(t => t !== tag) : [...prev, tag])}
@@ -807,30 +681,23 @@ function HouseholdDashboard({ currentUser, onLogout }) {
                 </button>
               ))}
             </div>
-
             <div className="flex flex-wrap gap-2 mb-4">
-              {['','breakfast','lunch','dinner','snack'].map(t => (
+              <button onClick={() => setMealTypeFilter('')}
+                className={`text-xs px-3 py-1 rounded-full border transition-all ${mealTypeFilter === '' ? 'bg-blue-500 text-white border-blue-500' : 'text-gray-500 border-gray-200'}`}>All</button>
+              {MEAL_TYPES.map(t => (
                 <button key={t} onClick={() => setMealTypeFilter(t)}
                   className={`text-xs px-3 py-1 rounded-full border transition-all ${mealTypeFilter === t ? 'bg-blue-500 text-white border-blue-500' : 'text-gray-500 border-gray-200'}`}>
-                  {t === '' ? 'All' : t}
+                  {t}
                 </button>
               ))}
             </div>
-
-            {filteredRecipes.length === 0 && (
-              <div className="text-center py-12 text-gray-400">
-                <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round" className="mb-2 mx-auto"><path d="M3 2v7c0 1.1.9 2 2 2h4a2 2 0 0 0 2-2V2"/><path d="M7 2v20"/><path d="M21 15V2a5 5 0 0 0-5 5v6c0 1.1.9 2 2 2h3zm0 0v7"/></svg>
-                <p className="text-sm">No recipes match your filters</p>
-              </div>
-            )}
-
+            {filteredRecipes.length === 0 && <div className="text-center py-12 text-gray-400"><p className="text-sm">No recipes match your filters</p></div>}
             {filteredRecipes.map(recipe => (
               <div key={recipe.id} onClick={async () => {
-                const res = await fetch(`${API}/api/recipes/${recipe.id}`, { headers: authHeaders() });
-                if (res.ok) setSelectedRecipe({...recipe, ...(await res.json())});
+                const r = await fetch(`${API}/api/recipes/${recipe.id}`, { headers: authHeaders() });
+                if (r.ok) setSelectedRecipe({...recipe, ...(await r.json())});
                 else setSelectedRecipe(recipe);
-              }}
-                className="bg-white rounded-xl border p-4 mb-2 cursor-pointer hover:border-green-300 transition-all">
+              }} className="bg-white rounded-xl border p-4 mb-2 cursor-pointer hover:border-green-300 transition-all">
                 <div className="flex justify-between items-start">
                   <div className="flex-1">
                     <div className="flex items-center gap-2 flex-wrap">
@@ -853,30 +720,19 @@ function HouseholdDashboard({ currentUser, onLogout }) {
           </div>
         )}
 
-        {/* ── ALL RECIPES TAB ── */}
-        {activeTab === 'allrecipes' && (
-          <AllRecipesTab API={API} authHeaders={authHeaders} notify={notify} />
-        )}
+        {activeTab === 'allrecipes' && <AllRecipesTab API={API} authHeaders={authHeaders} notify={notify} config={config} />}
 
-        {/* ── MEAL PLANNER TAB ── */}
         {activeTab === 'mealplan' && (
           <div>
             <h2 className="text-base font-bold text-gray-800 mb-3">Weekly meal planner</h2>
             <div className="flex gap-2 mb-4">
-              <button onClick={generateMealPlan}
-                className="flex-1 bg-green-500 text-white py-2.5 rounded-xl text-sm font-medium flex items-center justify-center gap-2"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83"/></svg>Auto-generate from pantry</button>
-              <button onClick={() => setMealPlanMode(mealPlanMode === 'edit' ? 'view' : 'edit')}
-                className="flex-1 bg-white border text-gray-600 py-2.5 rounded-xl text-sm font-medium">
-                <span className="flex items-center justify-center gap-2">{mealPlanMode === 'edit' ? <><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>View plan</> : <><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>Build my own</>}</span>
+              <button onClick={generateMealPlan} className="flex-1 bg-green-500 text-white py-2.5 rounded-xl text-sm font-medium flex items-center justify-center gap-2">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83"/></svg>Auto-generate from pantry</button>
+              <button onClick={() => setMealPlanMode(mealPlanMode === 'edit' ? 'view' : 'edit')} className="flex-1 bg-white border text-gray-600 py-2.5 rounded-xl text-sm font-medium">
+                {mealPlanMode === 'edit' ? 'View plan' : 'Build my own'}
               </button>
             </div>
-
-            {mealPlan?.pushed_by && (
-              <div className="bg-blue-50 border border-blue-200 rounded-xl p-3 mb-4 text-sm text-blue-700">
-                📅 Your dietitian sent you this meal plan
-              </div>
-            )}
-
+            {mealPlan?.pushed_by && <div className="bg-blue-50 border border-blue-200 rounded-xl p-3 mb-4 text-sm text-blue-700">📅 Your dietitian sent you this meal plan</div>}
             <div className="overflow-x-auto">
               <table className="w-full text-xs">
                 <thead>
@@ -892,12 +748,8 @@ function HouseholdDashboard({ currentUser, onLogout }) {
                       {DAYS.map(day => (
                         <td key={day} className="p-1">
                           {mealPlanMode === 'edit' ? (
-                            <select
-                              value={customPlan[day]?.[slot]?.id || ''}
-                              onChange={e => {
-                                const recipe = dbRecipes.find(r => r.id === parseInt(e.target.value));
-                                setCustomPlan(prev => ({ ...prev, [day]: { ...prev[day], [slot]: recipe || null } }));
-                              }}
+                            <select value={customPlan[day]?.[slot]?.id || ''}
+                              onChange={e => { const recipe = dbRecipes.find(r => r.id === parseInt(e.target.value)); setCustomPlan(prev => ({ ...prev, [day]: { ...prev[day], [slot]: recipe || null } })); }}
                               className="w-full text-xs border rounded p-1">
                               <option value="">--</option>
                               {dbRecipes.filter(r => !r.meal_type || r.meal_type.includes(slot)).map(r => (
@@ -916,19 +768,13 @@ function HouseholdDashboard({ currentUser, onLogout }) {
                 </tbody>
               </table>
             </div>
-
-            {mealPlanMode === 'edit' && (
-              <button onClick={saveMealPlan} className="mt-4 w-full bg-green-500 text-white py-3 rounded-xl font-medium">Save meal plan</button>
-            )}
+            {mealPlanMode === 'edit' && <button onClick={saveMealPlan} className="mt-4 w-full bg-green-500 text-white py-3 rounded-xl font-medium">Save meal plan</button>}
           </div>
         )}
 
-        {/* ── STATS TAB ── */}
         {activeTab === 'stats' && (
           <div>
             <h2 className="text-base font-bold text-gray-800 mb-4">My stats</h2>
-
-            {/* Rewards */}
             {rewards && (
               <div className="bg-gradient-to-r from-yellow-400 to-orange-400 rounded-2xl p-4 mb-4 text-white">
                 <div className="flex justify-between items-center">
@@ -948,34 +794,18 @@ function HouseholdDashboard({ currentUser, onLogout }) {
                 </div>
               </div>
             )}
-
-            {/* Save rate */}
             <div className="grid grid-cols-3 gap-3 mb-4">
-              <div className="bg-green-50 rounded-2xl p-3 text-center">
-                <p className="text-2xl font-bold text-green-600">{stats.used}</p>
-                <p className="text-xs text-green-600">Used</p>
-              </div>
-              <div className="bg-red-50 rounded-2xl p-3 text-center">
-                <p className="text-2xl font-bold text-red-500">{stats.wasted}</p>
-                <p className="text-xs text-red-500">Wasted</p>
-              </div>
-              <div className="bg-blue-50 rounded-2xl p-3 text-center">
-                <p className="text-2xl font-bold text-blue-600">{stats.saveRate}%</p>
-                <p className="text-xs text-blue-600">Save rate</p>
-              </div>
+              <div className="bg-green-50 rounded-2xl p-3 text-center"><p className="text-2xl font-bold text-green-600">{stats.used}</p><p className="text-xs text-green-600">Used</p></div>
+              <div className="bg-red-50 rounded-2xl p-3 text-center"><p className="text-2xl font-bold text-red-500">{stats.wasted}</p><p className="text-xs text-red-500">Wasted</p></div>
+              <div className="bg-blue-50 rounded-2xl p-3 text-center"><p className="text-2xl font-bold text-blue-600">{stats.saveRate}%</p><p className="text-xs text-blue-600">Save rate</p></div>
             </div>
-
             {stats.saveRate >= 80 && <div className="bg-green-50 border border-green-200 rounded-xl p-3 mb-4 text-sm text-green-700">Excellent — you are using most of what you buy!</div>}
             {stats.saveRate >= 50 && stats.saveRate < 80 && <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-3 mb-4 text-sm text-yellow-700">Good progress — keep reducing waste!</div>}
             {stats.saveRate < 50 && stats.total > 0 && <div className="bg-red-50 border border-red-200 rounded-xl p-3 mb-4 text-sm text-red-700">More than half your items are being wasted — check expiry dates regularly.</div>}
-
-            {/* Goals */}
             <div className="bg-white rounded-2xl border p-4 mb-4">
               <div className="flex justify-between items-center mb-3">
                 <h3 className="font-semibold text-gray-700">My goals</h3>
-                <button onClick={() => setShowGoalForm(true)} className="text-xs text-green-600 border border-green-300 px-3 py-1 rounded-lg">
-                  {goals ? 'Edit' : 'Set goals'}
-                </button>
+                <button onClick={() => setShowGoalForm(true)} className="text-xs text-green-600 border border-green-300 px-3 py-1 rounded-lg">{goals ? 'Edit' : 'Set goals'}</button>
               </div>
               {!goals && <p className="text-sm text-gray-400">No goals set yet — tap Set goals to get started</p>}
               {goals && (
@@ -1002,23 +832,18 @@ function HouseholdDashboard({ currentUser, onLogout }) {
                 </div>
               )}
             </div>
-
-            {/* Sharing toggle */}
             <div className="bg-white rounded-2xl border p-4 mb-4">
               <div className="flex justify-between items-center">
                 <div>
                   <p className="font-medium text-gray-700 text-sm">Share with dietitian</p>
                   <p className="text-xs text-gray-400">Allow your dietitian to view your pantry and waste data</p>
                 </div>
-                <button onClick={toggleSharing}
-                  className={`relative w-12 h-6 rounded-full transition-colors ${sharingOn ? 'bg-green-500' : 'bg-gray-300'}`}>
+                <button onClick={toggleSharing} className={`relative w-12 h-6 rounded-full transition-colors ${sharingOn ? 'bg-green-500' : 'bg-gray-300'}`}>
                   <span className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-transform ${sharingOn ? 'translate-x-7' : 'translate-x-1'}`} />
                 </button>
               </div>
               {sharingOn && <p className="text-xs text-green-600 mt-2 bg-green-50 p-2 rounded-lg">Active — your dietitian can see your pantry and waste data</p>}
             </div>
-
-            {/* Rewards breakdown */}
             {rewards && (
               <div className="bg-white rounded-2xl border p-4 mb-4">
                 <h3 className="font-semibold text-gray-700 mb-3">Activity summary</h3>
@@ -1029,12 +854,10 @@ function HouseholdDashboard({ currentUser, onLogout }) {
                 </div>
               </div>
             )}
-
-            {/* Activity log */}
             <div className="bg-white rounded-2xl border p-4">
               <h3 className="font-semibold text-gray-700 mb-3">Activity log</h3>
               {wasteLog.slice(0, 10).map((entry, i) => (
-                <div key={i} className={`flex items-center gap-3 py-2 border-b last:border-0`}>
+                <div key={i} className="flex items-center gap-3 py-2 border-b last:border-0">
                   <div className={`w-2 h-2 rounded-full ${entry.action === 'used' ? 'bg-green-400' : 'bg-red-400'}`} />
                   <span className="text-sm text-gray-700 flex-1">{entry.item_name}</span>
                   <span className={`text-xs px-2 py-0.5 rounded-full ${entry.action === 'used' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-600'}`}>{entry.action}</span>
@@ -1047,9 +870,6 @@ function HouseholdDashboard({ currentUser, onLogout }) {
         )}
       </div>
 
-      {/* ── MODALS ── */}
-
-      {/* Add item modal */}
       {showAddForm && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-end justify-center z-50">
           <div className="bg-white rounded-t-3xl w-full max-w-lg p-6">
@@ -1058,17 +878,9 @@ function HouseholdDashboard({ currentUser, onLogout }) {
               <div className="relative">
                 <label className="text-sm text-gray-600">Item name</label>
                 <input value={newItem.name}
-                  onChange={e => {
-                    const val = e.target.value;
-                    setNewItem({...newItem, name: val});
-                    clearTimeout(suggestTimer.current);
-                    suggestTimer.current = setTimeout(() => {
-                      fetchSuggestions(val);
-                      setShowSuggestions(true);
-                    }, 300);
-                  }}
+                  onChange={e => { const val = e.target.value; setNewItem({ ...newItem, name: val }); clearTimeout(suggestTimer.current); suggestTimer.current = setTimeout(() => { fetchSuggestions(val); setShowSuggestions(true); }, 300); }}
                   onBlur={() => setTimeout(() => setShowSuggestions(false), 150)}
-                  autoComplete="off"
+                  autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck={false} name="pm_pantry_item_nf"
                   placeholder="e.g. Dasheen, Chicken, Oats"
                   className="mt-1 w-full border rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-green-500 outline-none" />
                 {showSuggestions && suggestions.length > 0 && (
@@ -1091,17 +903,8 @@ function HouseholdDashboard({ currentUser, onLogout }) {
                 </div>
                 <div>
                   <label className="text-sm text-gray-600">Unit</label>
-                  <select value={newItem.unit_id} onChange={e => setNewItem({...newItem, unit_id: e.target.value})}
-                    className="mt-1 w-full border rounded-xl px-3 py-2.5 text-sm focus:ring-2 focus:ring-green-500 outline-none">
-                    <option value="">Select...</option>
-                    {['weight','volume','count','other'].map(grp => (
-                      <optgroup key={grp} label={grp.charAt(0).toUpperCase()+grp.slice(1)}>
-                        {units.filter(u => u.category === grp).map(u => (
-                          <option key={u.id} value={u.id}>{u.name} ({u.abbreviation})</option>
-                        ))}
-                      </optgroup>
-                    ))}
-                  </select>
+                  <UnitSelect value={newItem.unit_id} onChange={e => setNewItem({...newItem, unit_id: e.target.value})}
+                    className="mt-1 w-full border rounded-xl px-3 py-2.5 text-sm focus:ring-2 focus:ring-green-500 outline-none" />
                 </div>
               </div>
               <div>
@@ -1123,7 +926,6 @@ function HouseholdDashboard({ currentUser, onLogout }) {
         </div>
       )}
 
-      {/* Edit item modal */}
       {editItem && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-end justify-center z-50">
           <div className="bg-white rounded-t-3xl w-full max-w-lg p-6">
@@ -1145,17 +947,8 @@ function HouseholdDashboard({ currentUser, onLogout }) {
                 </div>
                 <div>
                   <label className="text-sm text-gray-600">Unit</label>
-                  <select value={editItem.unit_id || ''} onChange={e => setEditItem({...editItem, unit_id: e.target.value})}
-                    className="mt-1 w-full border rounded-xl px-3 py-2.5 text-sm focus:ring-2 focus:ring-green-500 outline-none">
-                    <option value="">Select...</option>
-                    {['weight','volume','count','other'].map(grp => (
-                      <optgroup key={grp} label={grp.charAt(0).toUpperCase()+grp.slice(1)}>
-                        {units.filter(u => u.category === grp).map(u => (
-                          <option key={u.id} value={u.id}>{u.name} ({u.abbreviation})</option>
-                        ))}
-                      </optgroup>
-                    ))}
-                  </select>
+                  <UnitSelect value={editItem.unit_id || ''} onChange={e => setEditItem({...editItem, unit_id: e.target.value})}
+                    className="mt-1 w-full border rounded-xl px-3 py-2.5 text-sm focus:ring-2 focus:ring-green-500 outline-none" />
                 </div>
               </div>
               <div>
@@ -1177,7 +970,6 @@ function HouseholdDashboard({ currentUser, onLogout }) {
         </div>
       )}
 
-      {/* Delete confirmation modal */}
       {pendingDelete && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl w-full max-w-sm p-6">
@@ -1192,12 +984,11 @@ function HouseholdDashboard({ currentUser, onLogout }) {
         </div>
       )}
 
-      {/* Leftover modal */}
       {showLeftoverForm && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl w-full max-w-sm p-6">
             <h3 className="text-lg font-bold text-gray-800 mb-2">Log leftover?</h3>
-            <p className="text-sm text-gray-500 mb-4">Did you cook {leftoverItem} and have leftovers? Log them so we can remind you to use them.</p>
+            <p className="text-sm text-gray-500 mb-4">Did you cook {leftoverItem} and have leftovers?</p>
             <input value={leftoverItem} onChange={e => setLeftoverItem(e.target.value)}
               className="w-full border rounded-xl px-4 py-2.5 text-sm mb-4 focus:ring-2 focus:ring-green-500 outline-none" />
             <div className="flex gap-3">
@@ -1208,7 +999,6 @@ function HouseholdDashboard({ currentUser, onLogout }) {
         </div>
       )}
 
-      {/* Goal form modal */}
       {showGoalForm && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-end justify-center z-50">
           <div className="bg-white rounded-t-3xl w-full max-w-lg p-6">
@@ -1238,7 +1028,6 @@ function HouseholdDashboard({ currentUser, onLogout }) {
         </div>
       )}
 
-      {/* Recipe detail modal */}
       {selectedRecipe && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-end justify-center z-50">
           <div className="bg-white rounded-t-3xl w-full max-w-lg p-6 max-h-screen overflow-y-auto">
@@ -1278,17 +1067,13 @@ function HouseholdDashboard({ currentUser, onLogout }) {
             <button onClick={async () => {
               const cookRes = await fetch(`${API}/api/recipes/${selectedRecipe.id}/cook`, { method: 'POST', headers: authHeaders() });
               const cookData = await cookRes.json();
-              setSelectedRecipe(null);
-              await fetchPantry();
-              await fetchRewards();
-              const reduced = cookData.reduced?.length ? ` Pantry updated: ${cookData.reduced.join(', ')}.` : '';
-              notify(`Recipe cooked — points awarded!${reduced}`);
+              setSelectedRecipe(null); await fetchPantry(); await fetchRewards();
+              notify(`Recipe cooked — points awarded!${cookData.reduced?.length ? ` Pantry updated: ${cookData.reduced.join(', ')}.` : ''}`);
             }} className="w-full bg-green-500 text-white py-3 rounded-xl font-medium">I cooked this!</button>
           </div>
         </div>
       )}
 
-      {/* PDF share modal */}
       {showPdfOptions && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl w-full max-w-sm p-6">
@@ -1303,90 +1088,46 @@ function HouseholdDashboard({ currentUser, onLogout }) {
             <p className="text-xs text-gray-400 mb-4">To save as PDF: use your browser's Print function and select "Save as PDF"</p>
             <div className="flex gap-3">
               <button onClick={() => setShowPdfOptions(false)} className="flex-1 border rounded-xl py-2.5 text-gray-600 text-sm">Close</button>
-              <button onClick={() => { setShowPdfOptions(false); window.print(); }}
-                className="flex-1 bg-blue-500 text-white rounded-xl py-2.5 text-sm font-medium">Print / Save PDF</button>
+              <button onClick={() => { setShowPdfOptions(false); window.print(); }} className="flex-1 bg-blue-500 text-white rounded-xl py-2.5 text-sm font-medium">Print / Save PDF</button>
             </div>
           </div>
         </div>
       )}
 
-      {/* ── BOTTOM NAV ── */}
       <div className="fixed bottom-0 left-0 right-0 bg-white border-t z-40">
         <div className="flex max-w-2xl mx-auto">
-
-          <button onClick={() => setActiveTab('pantry')}
-            className={`flex-1 flex flex-col items-center py-3 transition-all ${activeTab === 'pantry' ? 'text-green-600' : 'text-gray-400'}`}>
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
-              <polyline points="9 22 9 12 15 12 15 22"/>
-            </svg>
-            <span className="text-xs mt-0.5 font-medium">Pantry</span>
-            {activeTab === 'pantry' && <div className="w-1 h-1 bg-green-500 rounded-full mt-0.5"/>}
-          </button>
-
-          <button onClick={() => setActiveTab('recipes')}
-            className={`flex-1 flex flex-col items-center py-3 transition-all ${activeTab === 'recipes' ? 'text-green-600' : 'text-gray-400'}`}>
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M6 13.87A4 4 0 0 1 7.41 6a5.11 5.11 0 0 1 1.05-1.54 5 5 0 0 1 7.08 0A5.11 5.11 0 0 1 16.59 6 4 4 0 0 1 18 13.87V21H6Z"/>
-              <line x1="6" y1="17" x2="18" y2="17"/>
-            </svg>
-            <span className="text-xs mt-0.5 font-medium">Recipes</span>
-            {activeTab === 'recipes' && <div className="w-1 h-1 bg-green-500 rounded-full mt-0.5"/>}
-          </button>
-
-          <button onClick={() => setActiveTab('allrecipes')}
-            className={`flex-1 flex flex-col items-center py-3 transition-all ${activeTab === 'allrecipes' ? 'text-green-600' : 'text-gray-400'}`}>
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-              <circle cx="11" cy="11" r="8"/>
-              <line x1="21" y1="21" x2="16.65" y2="16.65"/>
-            </svg>
-            <span className="text-xs mt-0.5 font-medium">Browse</span>
-            {activeTab === 'allrecipes' && <div className="w-1 h-1 bg-green-500 rounded-full mt-0.5"/>}
-          </button>
-
-          <button onClick={() => setActiveTab('mealplan')}
-            className={`flex-1 flex flex-col items-center py-3 transition-all ${activeTab === 'mealplan' ? 'text-green-600' : 'text-gray-400'}`}>
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-              <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
-              <line x1="16" y1="2" x2="16" y2="6"/>
-              <line x1="8" y1="2" x2="8" y2="6"/>
-              <line x1="3" y1="10" x2="21" y2="10"/>
-            </svg>
-            <span className="text-xs mt-0.5 font-medium">Planner</span>
-            {activeTab === 'mealplan' && <div className="w-1 h-1 bg-green-500 rounded-full mt-0.5"/>}
-          </button>
-
-          <button onClick={() => setActiveTab('stats')}
-            className={`flex-1 flex flex-col items-center py-3 transition-all ${activeTab === 'stats' ? 'text-green-600' : 'text-gray-400'}`}>
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-              <line x1="18" y1="20" x2="18" y2="10"/>
-              <line x1="12" y1="20" x2="12" y2="4"/>
-              <line x1="6" y1="20" x2="6" y2="14"/>
-            </svg>
-            <span className="text-xs mt-0.5 font-medium">Stats</span>
-            {activeTab === 'stats' && <div className="w-1 h-1 bg-green-500 rounded-full mt-0.5"/>}
-                    </button>
-
+          {[
+            { tab: 'pantry',     label: 'Pantry',  icon: <><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></> },
+            { tab: 'recipes',    label: 'Recipes', icon: <><path d="M6 13.87A4 4 0 0 1 7.41 6a5.11 5.11 0 0 1 1.05-1.54 5 5 0 0 1 7.08 0A5.11 5.11 0 0 1 16.59 6 4 4 0 0 1 18 13.87V21H6Z"/><line x1="6" y1="17" x2="18" y2="17"/></> },
+            { tab: 'allrecipes', label: 'Browse',  icon: <><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></> },
+            { tab: 'mealplan',   label: 'Planner', icon: <><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></> },
+            { tab: 'stats',      label: 'Stats',   icon: <><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></> },
+          ].map(({ tab, label, icon }) => (
+            <button key={tab} onClick={() => setActiveTab(tab)}
+              className={`flex-1 flex flex-col items-center py-3 transition-all ${activeTab === tab ? 'text-green-600' : 'text-gray-400'}`}>
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">{icon}</svg>
+              <span className="text-xs mt-0.5 font-medium">{label}</span>
+              {activeTab === tab && <div className="w-1 h-1 bg-green-500 rounded-full mt-0.5"/>}
+            </button>
+          ))}
         </div>
       </div>
-
     </div>
   );
 }
 
-// ─── All Recipes Tab (separate component)
-function AllRecipesTab({ API, authHeaders, notify }) {
-  const [recipes, setRecipes]         = useState([]);
-  const [search, setSearch]           = useState('');
-  const [mealType, setMealType]       = useState('');
-  const [dietTag, setDietTag]         = useState('');
-  const [selected, setSelected]       = useState(null);
-  const [loading, setLoading]         = useState(true);
+function AllRecipesTab({ API, authHeaders, notify, config }) {
+  const [recipes, setRecipes]   = useState([]);
+  const [search, setSearch]     = useState('');
+  const [mealType, setMealType] = useState('');
+  const [dietTag, setDietTag]   = useState('');
+  const [selected, setSelected] = useState(null);
+  const [loading, setLoading]   = useState(true);
 
-  const DIET_TAGS = ['vegan','vegetarian','gluten-free','high-protein','low-salt','reduced-sugar'];
+  const DIET_TAGS  = config.dietTags;
+  const MEAL_TYPES = config.mealTypes;
 
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => { fetchAll(); }, [search, mealType, dietTag]);
+  useEffect(() => { fetchAll(); }, [search, mealType, dietTag]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const fetchAll = async () => {
     setLoading(true);
@@ -1394,8 +1135,8 @@ function AllRecipesTab({ API, authHeaders, notify }) {
     if (search)   params.append('search', search);
     if (mealType) params.append('mealType', mealType);
     if (dietTag)  params.append('dietary', dietTag);
-    const res = await fetch(`${API}/api/recipes?${params}`, { headers: authHeaders() });
-    if (res.ok) setRecipes(await res.json());
+    const r = await fetch(`${API}/api/recipes?${params}`, { headers: authHeaders() });
+    if (r.ok) setRecipes(await r.json());
     setLoading(false);
   };
 
@@ -1403,38 +1144,23 @@ function AllRecipesTab({ API, authHeaders, notify }) {
     <div>
       <h2 className="text-base font-bold text-gray-800 mb-1">All recipes</h2>
       <p className="text-xs text-gray-400 mb-3">Browse the full database · {recipes.length} recipes</p>
-
-      <input value={search} onChange={e => setSearch(e.target.value)}
-        placeholder="Search by name or ingredient..."
+      <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search by name or ingredient..."
         className="w-full border rounded-xl px-4 py-2.5 text-sm mb-3 focus:ring-2 focus:ring-green-500 outline-none" />
-
       <div className="flex flex-wrap gap-2 mb-2">
-        {['','breakfast','lunch','dinner','snack'].map(t => (
-          <button key={t} onClick={() => setMealType(t)}
-            className={`text-xs px-3 py-1 rounded-full border ${mealType === t ? 'bg-blue-500 text-white border-blue-500' : 'text-gray-500 border-gray-200'}`}>
-            {t === '' ? 'All meals' : t}
-          </button>
+        <button onClick={() => setMealType('')} className={`text-xs px-3 py-1 rounded-full border ${mealType === '' ? 'bg-blue-500 text-white border-blue-500' : 'text-gray-500 border-gray-200'}`}>All meals</button>
+        {MEAL_TYPES.map(t => (
+          <button key={t} onClick={() => setMealType(t)} className={`text-xs px-3 py-1 rounded-full border ${mealType === t ? 'bg-blue-500 text-white border-blue-500' : 'text-gray-500 border-gray-200'}`}>{t}</button>
         ))}
       </div>
-
       <div className="flex flex-wrap gap-2 mb-4">
-        <button onClick={() => setDietTag('')}
-          className={`text-xs px-3 py-1 rounded-full border ${dietTag === '' ? 'bg-green-500 text-white border-green-500' : 'text-gray-500 border-gray-200'}`}>
-          All diets
-        </button>
+        <button onClick={() => setDietTag('')} className={`text-xs px-3 py-1 rounded-full border ${dietTag === '' ? 'bg-green-500 text-white border-green-500' : 'text-gray-500 border-gray-200'}`}>All diets</button>
         {DIET_TAGS.map(tag => (
-          <button key={tag} onClick={() => setDietTag(dietTag === tag ? '' : tag)}
-            className={`text-xs px-3 py-1 rounded-full border ${dietTag === tag ? 'bg-green-500 text-white border-green-500' : 'text-gray-500 border-gray-200'}`}>
-            {tag}
-          </button>
+          <button key={tag} onClick={() => setDietTag(dietTag === tag ? '' : tag)} className={`text-xs px-3 py-1 rounded-full border ${dietTag === tag ? 'bg-green-500 text-white border-green-500' : 'text-gray-500 border-gray-200'}`}>{tag}</button>
         ))}
       </div>
-
       {loading && <p className="text-center text-gray-400 py-8">Loading recipes...</p>}
-
       {!loading && recipes.map(r => (
-        <div key={r.id} onClick={() => setSelected(r)}
-          className="bg-white rounded-xl border p-4 mb-2 cursor-pointer hover:border-green-300">
+        <div key={r.id} onClick={() => setSelected(r)} className="bg-white rounded-xl border p-4 mb-2 cursor-pointer hover:border-green-300">
           <div className="flex justify-between items-start">
             <div>
               <div className="flex items-center gap-2">
@@ -1454,14 +1180,7 @@ function AllRecipesTab({ API, authHeaders, notify }) {
           </div>
         </div>
       ))}
-
-      {!loading && recipes.length === 0 && (
-        <div className="text-center py-12 text-gray-400">
-          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round" className="mb-2 mx-auto"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
-          <p className="text-sm">No recipes found</p>
-        </div>
-      )}
-
+      {!loading && recipes.length === 0 && <div className="text-center py-12 text-gray-400"><p className="text-sm">No recipes found</p></div>}
       {selected && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-end justify-center z-50">
           <div className="bg-white rounded-t-3xl w-full max-w-lg p-6 max-h-screen overflow-y-auto">
@@ -1486,12 +1205,12 @@ function AllRecipesTab({ API, authHeaders, notify }) {
     </div>
   );
 }
-// ─── Main App ────────────────────────────────────────────────────────────────
+
 export default function App() {
   const [currentUser, setCurrentUser] = useState(null);
   const [dbRecipes, setDbRecipes]     = useState([]);
+  const [config, setConfig]           = useState(null);
 
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     const stored = localStorage.getItem('token');
     if (stored) {
@@ -1500,54 +1219,37 @@ export default function App() {
         if (payload.exp * 1000 > Date.now()) {
           setCurrentUser({ id: payload.id, name: payload.name, role: payload.role });
           if (payload.role === 'dietician') fetchRecipesForDietitian();
-        } else {
-          localStorage.removeItem('token');
-        }
-      } catch {
-        localStorage.removeItem('token');
-      }
+        } else { localStorage.removeItem('token'); }
+      } catch { localStorage.removeItem('token'); }
     }
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (!currentUser) return;
+    fetch(`${API}/api/config`, { headers: authHeaders() })
+      .then(r => r.json())
+      .then(data => setConfig(data))
+      .catch(() => setConfig({ days: ['monday','tuesday','wednesday','thursday','friday','saturday','sunday'], mealSlots: ['breakfast','lunch','dinner','snack'], dietTags: [], mealTypes: ['breakfast','lunch','dinner','snack'] }));
+  }, [currentUser]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const fetchRecipesForDietitian = async () => {
-    const res = await fetch(`${API}/api/recipes`, {
-      headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
-    });
-    if (res.ok) setDbRecipes(await res.json());
+    const r = await fetch(`${API}/api/recipes`, { headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } });
+    if (r.ok) setDbRecipes(await r.json());
   };
 
   const login = async (user) => {
     setCurrentUser(user);
     if (user.role === 'dietician') {
-      const res = await fetch(`${API}/api/recipes`, {
-        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
-      });
-      if (res.ok) setDbRecipes(await res.json());
+      const r = await fetch(`${API}/api/recipes`, { headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } });
+      if (r.ok) setDbRecipes(await r.json());
     }
   };
 
-  const logout = () => {
-    setCurrentUser(null);
-    setDbRecipes([]);
-    localStorage.removeItem('token');
-  };
+  const logout = () => { setCurrentUser(null); setDbRecipes([]); setConfig(null); localStorage.removeItem('token'); };
 
   if (!currentUser) return <AuthScreen onLogin={login} />;
+  if (!config)      return <div className="min-h-screen bg-gray-50 flex items-center justify-center"><p className="text-gray-400 text-sm">Loading...</p></div>;
 
-  if (currentUser.role === 'dietician') {
-    return (
-      <DietitianDashboard
-        currentUser={currentUser}
-        onLogout={logout}
-        dbRecipes={dbRecipes}
-      />
-    );
-  }
-
-  return (
-    <HouseholdDashboard
-      currentUser={currentUser}
-      onLogout={logout}
-    />
-  );
+  if (currentUser.role === 'dietician') return <DietitianDashboard currentUser={currentUser} onLogout={logout} dbRecipes={dbRecipes} config={config} />;
+  return <HouseholdDashboard currentUser={currentUser} onLogout={logout} config={config} />;
 }

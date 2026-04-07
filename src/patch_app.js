@@ -5,7 +5,6 @@ const path = require('path');
 const appPath = path.join(process.env.HOME, 'Desktop/pantrymate/src/App.js');
 let src = fs.readFileSync(appPath, 'utf8');
 
-// ── 1. Add units/categories/suggestions/editItem state after newItem state
 src = src.replace(
   `const [newItem, setNewItem]             = useState({ name:'', category:'Produce', quantity:1, unit:'item', expiryDate:'' });`,
   `const [newItem, setNewItem]             = useState({ name:'', category_id:'', unit_id:'', quantity:1, expiryDate:'' });
@@ -16,7 +15,6 @@ src = src.replace(
   const [showSuggestions, setShowSuggestions] = useState(false);`
 );
 
-// ── 2. Add fetchUnits + fetchCategories to fetchAll Promise.all
 src = src.replace(
   `await Promise.all([
       fetchPantry(), fetchWaste(), fetchRecipes(), fetchLeftovers(),
@@ -31,7 +29,6 @@ src = src.replace(
     ]);`
 );
 
-// ── 3. Add fetchUnits, fetchCategories, fetchSuggestions after fetchNotifications
 src = src.replace(
   `  const fetchNotifications = async () => {
     const res = await fetch(\`\${API}/api/notifications\`, { headers: authHeaders() });
@@ -74,7 +71,6 @@ src = src.replace(
   };`
 );
 
-// ── 4. Fix addItem — send unit_id/category_id + expiry validation
 src = src.replace(
   `  const addItem = async () => {
     if (!newItem.name.trim()) return;
@@ -114,7 +110,6 @@ src = src.replace(
   };`
 );
 
-// ── 5. Fix "I cooked this" endpoint use → cook + refresh pantry
 src = src.replace(
   `await fetch(\`\${API}/api/recipes/\${selectedRecipe.id}/use\`, { method: 'POST', headers: authHeaders() });
               setSelectedRecipe(null);
@@ -129,7 +124,6 @@ src = src.replace(
               notify(\`Recipe cooked — points awarded!\${reduced}\`);`
 );
 
-// ── 6. Replace add form: name input with predictive text
 src = src.replace(
   `              <div>
                 <label className="text-sm text-gray-600">Item name</label>
@@ -163,7 +157,6 @@ src = src.replace(
               </div>`
 );
 
-// ── 7. Replace hardcoded category + unit dropdowns in add form
 src = src.replace(
   `              <div className="grid grid-cols-2 gap-3">
                 <div>
@@ -207,7 +200,6 @@ src = src.replace(
               </div>`
 );
 
-// ── 8. Add edit modal just before the delete confirmation modal
 src = src.replace(
   `      {/* Delete confirmation modal */}`,
   `      {/* Edit item modal */}
