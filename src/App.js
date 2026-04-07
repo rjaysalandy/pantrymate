@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import './App.css';
+import { LeafIcon, LogoFull, LogoWordmarkStacked } from './Logo';
 
 const API = process.env.REACT_APP_API_URL || 'http://localhost:8080';
 
@@ -67,11 +68,10 @@ function AuthScreen({ onLogin }) {
     <div className="min-h-screen bg-gradient-to-br from-green-50 to-emerald-100 flex items-center justify-center p-4">
       <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-8">
         <div className="text-center mb-8">
-          <div className="w-16 h-16 bg-green-500 rounded-2xl flex items-center justify-center mx-auto mb-4">
-            <span className="text-white text-2xl">🥦</span>
+          <div className="flex justify-center mb-4">
+            <LogoWordmarkStacked size="lg" />
           </div>
-          <h1 className="text-2xl font-bold text-gray-800">WasteLess PantryMate</h1>
-          <p className="text-gray-500 text-sm mt-1">Smart food management for T&T households</p>
+          <p className="text-gray-400 text-sm mt-2">Smart food management for T&amp;T households</p>
         </div>
         <div className="flex bg-gray-100 rounded-xl p-1 mb-6">
           {['login','register'].map(m => (
@@ -568,9 +568,9 @@ function HouseholdDashboard({ currentUser, onLogout, config }) {
       )}
 
       <div className="bg-white border-b px-4 py-3 flex justify-between items-center sticky top-0 z-40">
-        <div>
-          <h1 onClick={() => setActiveTab('pantry')} className="text-base font-bold text-gray-800 cursor-pointer active:text-green-600">WasteLess PantryMate</h1>
-          <p className="text-xs text-gray-400">{greeting()}, {currentUser.name?.split(' ')[0] || 'there'}! 👋</p>
+        <div onClick={() => setActiveTab('pantry')} className="cursor-pointer flex flex-col gap-0.5">
+          <LogoFull size="sm" />
+          <p className="text-xs text-gray-400 pl-1">{greeting()}, {currentUser.name?.split(' ')[0] || 'there'}! 👋</p>
         </div>
         <div className="flex items-center gap-2">
           {unreadCount > 0 && <span className="bg-red-500 text-white text-xs w-5 h-5 rounded-full flex items-center justify-center">{unreadCount}</span>}
