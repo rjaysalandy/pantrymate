@@ -122,6 +122,82 @@ function AuthScreen({ onLogin }) {
   );
 }
 
+// ── Demo patients — shown to all dietitian logins ─────────────────────────
+const DEMO_PATIENTS = [
+  {
+    userId:   'demo-1',
+    name:     'Aaliyah Ramsaran',
+    email:    'a.ramsaran@demo.wasteless.tt',
+    isDemo:   true,
+    items: [
+      { name: 'Dasheen',         days_left: 2,  quantity: 1.5, unit: 'kg'     },
+      { name: 'Chicken',         days_left: 1,  quantity: 2,   unit: 'kg'     },
+      { name: 'Carib Full Cream Milk', days_left: 3, quantity: 1, unit: 'litre' },
+      { name: 'Brown Rice',      days_left: 60, quantity: 1,   unit: 'bag'    },
+      { name: 'Lentils',         days_left: 90, quantity: 500, unit: 'g'      },
+      { name: 'Canola Oil',      days_left: 120,quantity: 1,   unit: 'bottle' },
+      { name: 'Chief Pepper Sauce', days_left: 200, quantity: 1, unit: 'bottle' },
+    ],
+    wasteLog: [
+      { action: 'used',   item_name: 'Chicken',   date: '2026-04-08' },
+      { action: 'used',   item_name: 'Dasheen',   date: '2026-04-07' },
+      { action: 'wasted', item_name: 'Tomatoes',  date: '2026-04-06' },
+      { action: 'used',   item_name: 'Lentils',   date: '2026-04-05' },
+      { action: 'wasted', item_name: 'Bread',     date: '2026-04-04' },
+      { action: 'used',   item_name: 'Brown Rice', date: '2026-04-03' },
+    ],
+    messages: [],
+    currentGoal: 'Reduce processed food intake. Aim for 3 home-cooked meals per day.',
+  },
+  {
+    userId:   'demo-2',
+    name:     'Marcus Phillip',
+    email:    'm.phillip@demo.wasteless.tt',
+    isDemo:   true,
+    items: [
+      { name: 'Saltfish',        days_left: -1, quantity: 200, unit: 'g'      },
+      { name: 'Plantain',        days_left: 4,  quantity: 3,   unit: 'item'   },
+      { name: 'Coconut Milk',    days_left: 180,quantity: 1,   unit: 'tin'    },
+      { name: 'Sweet Potato',    days_left: 10, quantity: 1,   unit: 'kg'     },
+      { name: 'Oats',            days_left: 90, quantity: 1,   unit: 'pack'   },
+    ],
+    wasteLog: [
+      { action: 'wasted', item_name: 'Saltfish',   date: '2026-04-09' },
+      { action: 'wasted', item_name: 'Lettuce',    date: '2026-04-07' },
+      { action: 'used',   item_name: 'Plantain',   date: '2026-04-06' },
+      { action: 'wasted', item_name: 'Tomatoes',   date: '2026-04-05' },
+      { action: 'used',   item_name: 'Oats',       date: '2026-04-04' },
+      { action: 'wasted', item_name: 'Sweet Potato', date: '2026-04-03' },
+    ],
+    messages: [],
+    currentGoal: '',
+  },
+  {
+    userId:   'demo-3',
+    name:     'Priya Maharaj',
+    email:    'p.maharaj@demo.wasteless.tt',
+    isDemo:   true,
+    items: [
+      { name: 'Basmati Rice',    days_left: 180,quantity: 2,   unit: 'kg'     },
+      { name: 'Channa',          days_left: 365,quantity: 500, unit: 'g'      },
+      { name: 'Pumpkin',         days_left: 5,  quantity: 1,   unit: 'kg'     },
+      { name: 'Mango',           days_left: 3,  quantity: 4,   unit: 'item'   },
+      { name: 'Yoghurt',         days_left: 2,  quantity: 500, unit: 'g'      },
+      { name: 'Spinach',         days_left: 1,  quantity: 1,   unit: 'bunch'  },
+    ],
+    wasteLog: [
+      { action: 'used',   item_name: 'Spinach',    date: '2026-04-09' },
+      { action: 'used',   item_name: 'Channa',     date: '2026-04-08' },
+      { action: 'used',   item_name: 'Pumpkin',    date: '2026-04-07' },
+      { action: 'used',   item_name: 'Mango',      date: '2026-04-06' },
+      { action: 'wasted', item_name: 'Yoghurt',    date: '2026-04-05' },
+      { action: 'used',   item_name: 'Basmati Rice', date: '2026-04-04' },
+    ],
+    messages: [],
+    currentGoal: 'Maintain vegetarian diet. Increase protein intake through legumes.',
+  },
+];
+
 function DietitianDashboard({ currentUser, onLogout, dbRecipes, config }) {
   const [patients, setPatients]           = useState([]);
   const [selected, setSelected]           = useState(null);
@@ -131,6 +207,7 @@ function DietitianDashboard({ currentUser, onLogout, dbRecipes, config }) {
   const [goal, setGoal]                   = useState('');
   const [mealPlan, setMealPlan]           = useState({});
   const [notification, setNotification]   = useState('');
+  const [demoMessages, setDemoMessages]   = useState({ 'demo-1': [], 'demo-2': [], 'demo-3': [] });
 
   const DAYS  = config.days;
   const SLOTS = config.mealSlots;
@@ -140,13 +217,43 @@ function DietitianDashboard({ currentUser, onLogout, dbRecipes, config }) {
   const fetchPatients = async () => {
     const res = await fetch(`${API}/api/sharing/patients`, { headers: authHeaders() });
     const data = await res.json();
-    if (res.ok) { setPatients(data); if (data.length) setSelected(data[0]); }
+    // Merge real patients with demo patients — demo patients always appear first
+    const real = res.ok ? data : [];
+    const all  = [...DEMO_PATIENTS, ...real];
+    setPatients(all);
+    setSelected(all[0]);
+    setClinicalNotes(all[0]?.currentGoal ? '' : '');
+    setGoal(all[0]?.currentGoal || '');
+  };
+
+  const selectPatient = (p) => {
+    setSelected(p);
+    setActiveTab('overview');
+    setClinicalNotes('');
+    setGoal(p.currentGoal || '');
+    setMealPlan({});
+    setMsgBody('');
   };
 
   const notify = (msg) => { setNotification(msg); setTimeout(() => setNotification(''), 3000); };
 
   const sendMessage = async () => {
     if (!msgBody.trim() || !selected) return;
+    if (selected.isDemo) {
+      // For demo patients, store message locally in state
+      setDemoMessages(prev => ({
+        ...prev,
+        [selected.userId]: [...(prev[selected.userId] || []), {
+          from_user_id: currentUser.id,
+          sender_name:  currentUser.name,
+          body:         msgBody,
+          sent_at:      new Date().toISOString(),
+          type:         'reminder'
+        }]
+      }));
+      setMsgBody(''); notify('Message sent!');
+      return;
+    }
     await fetch(`${API}/api/messages`, {
       method: 'POST', headers: authHeaders(),
       body: JSON.stringify({ toUserId: selected.userId, body: msgBody, type: 'reminder' })
@@ -156,6 +263,7 @@ function DietitianDashboard({ currentUser, onLogout, dbRecipes, config }) {
 
   const saveRecord = async () => {
     if (!selected) return;
+    if (selected.isDemo) { notify('Record saved!'); return; }
     await fetch(`${API}/api/sharing/patient-record`, {
       method: 'POST', headers: authHeaders(),
       body: JSON.stringify({ userId: selected.userId, currentGoal: goal, clinicalNotes })
@@ -165,6 +273,7 @@ function DietitianDashboard({ currentUser, onLogout, dbRecipes, config }) {
 
   const pushMealPlan = async () => {
     if (!selected) return;
+    if (selected.isDemo) { notify('Meal plan pushed to patient!'); return; }
     await fetch(`${API}/api/mealplanner/push`, {
       method: 'POST', headers: authHeaders(),
       body: JSON.stringify({ patientId: selected.userId, planData: mealPlan })
@@ -180,6 +289,11 @@ function DietitianDashboard({ currentUser, onLogout, dbRecipes, config }) {
   };
 
   const recipes = dbRecipes || [];
+
+  // For demo patients, pull messages from local state
+  const selectedMessages = selected?.isDemo
+    ? demoMessages[selected.userId] || []
+    : selected?.messages || [];
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -198,9 +312,14 @@ function DietitianDashboard({ currentUser, onLogout, dbRecipes, config }) {
           <p className="text-xs font-semibold text-gray-400 uppercase mb-3">Patients ({patients.length})</p>
           {patients.length === 0 && <p className="text-sm text-gray-400">No patients sharing data yet</p>}
           {patients.map(p => (
-            <button key={p.userId} onClick={() => { setSelected(p); setActiveTab('overview'); }}
+            <button key={p.userId} onClick={() => selectPatient(p)}
               className={`w-full text-left p-3 rounded-xl mb-2 transition-all ${selected?.userId === p.userId ? 'bg-green-50 border border-green-200' : 'hover:bg-gray-50'}`}>
-              <p className="font-medium text-sm text-gray-800">{p.name}</p>
+              <div className="flex items-center gap-2 mb-0.5">
+                <p className="font-medium text-sm text-gray-800">{p.name}</p>
+                {p.isDemo && (
+                  <span className="text-xs font-medium text-gray-400 border border-gray-200 rounded px-1.5 py-0.5 leading-none tracking-wide">Demo</span>
+                )}
+              </div>
               <p className="text-xs text-gray-400">{p.items?.length || 0} pantry items · {saveRate(p)}% save rate</p>
             </button>
           ))}
@@ -212,7 +331,12 @@ function DietitianDashboard({ currentUser, onLogout, dbRecipes, config }) {
             <>
               <div className="flex items-center justify-between mb-6">
                 <div>
-                  <h2 className="text-xl font-bold text-gray-800">{selected.name}</h2>
+                  <div className="flex items-center gap-3">
+                    <h2 className="text-xl font-bold text-gray-800">{selected.name}</h2>
+                    {selected.isDemo && (
+                      <span className="text-xs font-medium text-gray-400 border border-gray-200 rounded px-2 py-0.5 tracking-wide">Demo patient</span>
+                    )}
+                  </div>
                   <p className="text-sm text-gray-500">{selected.email}</p>
                 </div>
                 {saveRate(selected) < 50 && (
@@ -271,7 +395,10 @@ function DietitianDashboard({ currentUser, onLogout, dbRecipes, config }) {
                 <div className="bg-white rounded-xl p-4 border">
                   <h3 className="font-semibold text-gray-700 mb-4">Send message to {selected.name}</h3>
                   <div className="space-y-3 mb-4 max-h-64 overflow-y-auto">
-                    {selected.messages?.map((m, i) => (
+                    {selectedMessages.length === 0 && (
+                      <p className="text-sm text-gray-400 text-center py-4">No messages yet</p>
+                    )}
+                    {selectedMessages.map((m, i) => (
                       <div key={i} className={`p-3 rounded-xl text-sm ${m.from_user_id === currentUser.id ? 'bg-green-50 text-green-800 ml-8' : 'bg-gray-50 text-gray-700 mr-8'}`}>
                         <p className="font-medium text-xs mb-1">{m.sender_name} · {new Date(m.sent_at).toLocaleDateString()}</p>
                         {m.body}
@@ -342,6 +469,7 @@ function DietitianDashboard({ currentUser, onLogout, dbRecipes, config }) {
                           <p className="text-xs text-gray-400">{r.prep_time}min · {r.calories}cal · {r.difficulty}</p>
                         </div>
                         <button onClick={async () => {
+                          if (selected.isDemo) { notify(`${r.name} recommended!`); return; }
                           await fetch(`${API}/api/messages`, {
                             method: 'POST', headers: authHeaders(),
                             body: JSON.stringify({ toUserId: selected.userId, body: `I recommend trying: ${r.name}. ${r.instructions?.slice(0,100)}...`, type: 'recipe' })
@@ -527,9 +655,24 @@ function HouseholdDashboard({ currentUser, onLogout, config }) {
   };
 
   const scanBarcode = async () => {
-    const r = await fetch(`${API}/api/barcode/scan`, { headers: authHeaders() });
-    if (r.ok) { const item = await r.json(); setNewItem({ name: item.name, category: item.category, quantity: item.quantity, unit: item.unit, expiryDate: item.expiryDate }); setShowAddForm(true); }
-  };
+  const r = await fetch(`${API}/api/barcode/scan`, { headers: authHeaders() });
+  if (!r.ok) return;
+  const item = await r.json();
+
+  // Match the returned category name to a category ID from the loaded list
+  const matchedCategory = categories.find(c => c.name.toLowerCase() === item.category.toLowerCase());
+  // Match the returned unit name to a unit ID from the loaded list
+  const matchedUnit = units.find(u => u.name.toLowerCase() === item.unit.toLowerCase() || u.abbreviation.toLowerCase() === item.unit.toLowerCase());
+
+  setNewItem({
+    name:        item.name,
+    category_id: matchedCategory ? matchedCategory.id : '',
+    unit_id:     matchedUnit     ? matchedUnit.id     : '',
+    quantity:    item.quantity,
+    expiryDate:  item.expiryDate || ''
+  });
+  setShowAddForm(true);
+};
 
   const stats = {
     total:    wasteLog.length,
@@ -1127,8 +1270,7 @@ function AllRecipesTab({ API, authHeaders, notify, config }) {
   const DIET_TAGS  = config.dietTags;
   const MEAL_TYPES = config.mealTypes;
 
-  useEffect(() => { fetchAll(); }, [search, mealType, dietTag]); // eslint-disable-line react-hooks/exhaustive-deps
-
+  useEffect(() => {
   const fetchAll = async () => {
     setLoading(true);
     const params = new URLSearchParams();
@@ -1139,6 +1281,9 @@ function AllRecipesTab({ API, authHeaders, notify, config }) {
     if (r.ok) setRecipes(await r.json());
     setLoading(false);
   };
+
+  fetchAll();
+}, [search, mealType, dietTag]);
 
   return (
     <div>
@@ -1222,7 +1367,7 @@ export default function App() {
         } else { localStorage.removeItem('token'); }
       } catch { localStorage.removeItem('token'); }
     }
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, []); 
 
   useEffect(() => {
     if (!currentUser) return;
@@ -1230,7 +1375,7 @@ export default function App() {
       .then(r => r.json())
       .then(data => setConfig(data))
       .catch(() => setConfig({ days: ['monday','tuesday','wednesday','thursday','friday','saturday','sunday'], mealSlots: ['breakfast','lunch','dinner','snack'], dietTags: [], mealTypes: ['breakfast','lunch','dinner','snack'] }));
-  }, [currentUser]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [currentUser]); 
 
   const fetchRecipesForDietitian = async () => {
     const r = await fetch(`${API}/api/recipes`, { headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } });
