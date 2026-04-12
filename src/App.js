@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import './App.css';
-import { LeafIcon, LogoFull, LogoWordmarkStacked } from './Logo';
+import { LogoFull } from './Logo';
+import fullLogo from './logo-horizontal-exact.svg';
 
 const API = process.env.REACT_APP_API_URL || 'http://localhost:8080';
 
@@ -63,16 +64,14 @@ function AuthScreen({ onLogin }) {
     } catch (e) { setError('Cannot connect to server. Is the backend running?'); }
     finally { setLoading(false); }
   };
-
-  return (
+return (
     <div className="min-h-screen bg-gradient-to-br from-green-50 to-emerald-100 flex items-center justify-center p-4">
       <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-8">
-        <div className="text-center mb-8">
-          <div className="flex justify-center mb-4">
-            <LogoWordmarkStacked size="lg" />
-          </div>
-          <p className="text-gray-400 text-sm mt-2">Smart food management for T&amp;T households</p>
+
+        <div className="flex justify-center mb-8">
+          <img src={fullLogo} alt="WasteLess PantryMate" className="h-16 w-auto" />
         </div>
+
         <div className="flex bg-gray-100 rounded-xl p-1 mb-6">
           {['login','register'].map(m => (
             <button key={m} onClick={() => setMode(m)}
@@ -81,6 +80,30 @@ function AuthScreen({ onLogin }) {
             </button>
           ))}
         </div>
+
+        {mode === 'register' && (
+          <div className="flex gap-3 mb-6">
+            {[
+              {
+                val: 'user', label: 'Household', sub: 'Manage pantry & reduce waste',
+                icon: <svg width="26" height="26" viewBox="0 0 26 26" fill="none"><path d="M13 2L3 10v13h5v-7h10v7h5V10L13 2Z" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" fill="none"/></svg>
+              },
+              {
+                val: 'dietician', label: 'Dietitian', sub: 'Manage patients & plans',
+                icon: <svg width="26" height="26" viewBox="0 0 26 26" fill="none"><circle cx="13" cy="8" r="5" stroke="currentColor" strokeWidth="1.8" fill="none"/><path d="M3 23c0-5.523 4.477-9 10-9s10 3.477 10 9" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" fill="none"/><line x1="20" y1="14" x2="20" y2="21" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/><line x1="17" y1="17.5" x2="23" y2="17.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/></svg>
+              }
+            ].map(({ val, label, sub, icon }) => (
+              <button key={val} onClick={() => setRole(val)}
+                className={`flex-1 flex flex-col items-center gap-1.5 py-4 px-2 rounded-xl border-2 transition-all text-center
+                  ${role === val ? 'border-green-500 bg-green-50 text-green-700' : 'border-gray-200 text-gray-400 hover:border-gray-300'}`}>
+                <span className={role === val ? 'text-green-600' : 'text-gray-400'}>{icon}</span>
+                <span className="text-sm font-semibold">{label}</span>
+                <span className="text-xs leading-tight opacity-75">{sub}</span>
+              </button>
+            ))}
+          </div>
+        )}
+
         {mode === 'register' && (
           <div className="mb-4">
             <label className="text-sm font-medium text-gray-700">Full name</label>
@@ -95,27 +118,19 @@ function AuthScreen({ onLogin }) {
             className="mt-1 w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 outline-none"
             placeholder="you@example.com" />
         </div>
-        <div className="mb-4">
+        <div className="mb-6">
           <label className="text-sm font-medium text-gray-700">Password</label>
           <input type="password" value={pass} onChange={e => setPass(e.target.value)}
             onKeyDown={e => e.key === 'Enter' && submit()}
             className="mt-1 w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 outline-none"
             placeholder="••••••••" />
         </div>
-        {mode === 'register' && (
-          <div className="mb-6">
-            <label className="text-sm font-medium text-gray-700">I am registering as</label>
-            <select value={role} onChange={e => setRole(e.target.value)}
-              className="mt-1 w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 outline-none">
-              <option value="user">Household User</option>
-              <option value="dietician">Dietitian / Healthcare Provider</option>
-            </select>
-          </div>
-        )}
+
         {error && <p className="text-red-500 text-sm mb-4 bg-red-50 p-3 rounded-lg">{error}</p>}
+
         <button onClick={submit} disabled={loading}
           className="w-full bg-green-500 hover:bg-green-600 text-white py-3 rounded-xl font-semibold transition-all disabled:opacity-50">
-          {loading ? 'Please wait...' : mode === 'login' ? 'Sign In' : 'Create Account'}
+          {loading ? 'Please wait…' : mode === 'login' ? 'Sign In' : `Create ${role === 'dietician' ? 'Dietitian' : 'Household'} Account`}
         </button>
       </div>
     </div>
@@ -1269,7 +1284,7 @@ function AllRecipesTab({ API, authHeaders, notify, config }) {
 
   const DIET_TAGS  = config.dietTags;
   const MEAL_TYPES = config.mealTypes;
-
+// eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
   const fetchAll = async () => {
     setLoading(true);
