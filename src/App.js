@@ -356,7 +356,7 @@ function DietitianDashboard({ currentUser, onLogout, dbRecipes, config }) {
                 </div>
                 {saveRate(selected) < 50 && (
                   <div className="bg-amber-50 border border-amber-200 text-amber-700 px-4 py-2 rounded-xl text-sm">
-                    ⚠️ High waste rate — {100 - saveRate(selected)}% of items wasted
+                    High waste rate — {100 - saveRate(selected)}% of items wasted
                   </div>
                 )}
               </div>
@@ -728,7 +728,7 @@ function HouseholdDashboard({ currentUser, onLogout, config }) {
       <div className="bg-white border-b px-4 py-3 flex justify-between items-center sticky top-0 z-40">
         <div onClick={() => setActiveTab('pantry')} className="cursor-pointer flex flex-col gap-0.5">
           <LogoFull size="sm" />
-          <p className="text-xs text-gray-400 pl-1">{greeting()}, {currentUser.name?.split(' ')[0] || 'there'}! 👋</p>
+          <p className="text-xs text-gray-400 pl-1">{greeting()}, {currentUser.name?.split(' ')[0] || 'there'}!</p>
         </div>
         <div className="flex items-center gap-2">
           {unreadCount > 0 && <span className="bg-red-500 text-white text-xs w-5 h-5 rounded-full flex items-center justify-center">{unreadCount}</span>}
@@ -890,7 +890,12 @@ function HouseholdDashboard({ currentUser, onLogout, config }) {
                 {mealPlanMode === 'edit' ? 'View plan' : 'Build my own'}
               </button>
             </div>
-            {mealPlan?.pushed_by && <div className="bg-blue-50 border border-blue-200 rounded-xl p-3 mb-4 text-sm text-blue-700">📅 Your dietitian sent you this meal plan</div>}
+            {mealPlan?.pushed_by && (
+              <div className="bg-blue-50 border border-blue-200 rounded-xl p-3 mb-4 text-sm text-blue-700 flex items-center gap-2">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+                Your dietitian sent you this meal plan
+              </div>
+            )}
             <div className="overflow-x-auto">
               <table className="w-full text-xs">
                 <thead>
@@ -1225,7 +1230,7 @@ function HouseholdDashboard({ currentUser, onLogout, config }) {
             <button onClick={async () => {
               const cookRes = await fetch(`${API}/api/recipes/${selectedRecipe.id}/cook`, { method: 'POST', headers: authHeaders() });
               const cookData = await cookRes.json();
-              setSelectedRecipe(null); await fetchPantry(); await fetchRewards();
+              setSelectedRecipe(null); await fetchPantry(); await fetchRewards(); await fetchWaste();
               notify(`Recipe cooked — points awarded!${cookData.reduced?.length ? ` Pantry updated: ${cookData.reduced.join(', ')}.` : ''}`);
             }} className="w-full bg-green-500 text-white py-3 rounded-xl font-medium">I cooked this!</button>
           </div>
@@ -1239,9 +1244,9 @@ function HouseholdDashboard({ currentUser, onLogout, config }) {
             <p className="text-sm text-gray-500 mb-4">Share with friends, Dietitian or Nutritionist</p>
             <div className="space-y-2 mb-5">
               <p className="text-sm text-gray-600">{items.length} pantry items</p>
-              <p className="text-sm text-gray-600">📊 Save rate: {stats.saveRate}%</p>
-              <p className="text-sm text-gray-600">✅ {stats.used} items used · ❌ {stats.wasted} wasted</p>
-              {rewards && <p className="text-sm text-gray-600">🏅 Badge: {rewards.badge}</p>}
+              <p className="text-sm text-gray-600">Save rate: {stats.saveRate}%</p>
+              <p className="text-sm text-gray-600">{stats.used} items used · {stats.wasted} wasted</p>
+              {rewards && <p className="text-sm text-gray-600">Badge: {rewards.badge}</p>}
             </div>
             <p className="text-xs text-gray-400 mb-4">To save as PDF: use your browser's Print function and select "Save as PDF"</p>
             <div className="flex gap-3">
@@ -1320,7 +1325,11 @@ function AllRecipesTab({ API, authHeaders, notify, config }) {
       </div>
       {loading && <p className="text-center text-gray-400 py-8">Loading recipes...</p>}
       {!loading && recipes.map(r => (
-        <div key={r.id} onClick={() => setSelected(r)} className="bg-white rounded-xl border p-4 mb-2 cursor-pointer hover:border-green-300">
+        <div key={r.id} onClick={async () => {
+          const res = await fetch(`${API}/api/recipes/${r.id}`, { headers: authHeaders() });
+          if (res.ok) setSelected({ ...r, ...(await res.json()) });
+          else setSelected(r);
+        }} className="bg-white rounded-xl border p-4 mb-2 cursor-pointer hover:border-green-300">
           <div className="flex justify-between items-start">
             <div>
               <div className="flex items-center gap-2">
@@ -1351,14 +1360,33 @@ function AllRecipesTab({ API, authHeaders, notify, config }) {
               </div>
               <button onClick={() => setSelected(null)} className="text-gray-400 text-xl">✕</button>
             </div>
+            {selected.dietary_tags && (
+              <div className="flex flex-wrap gap-1 mb-3">
+                {selected.dietary_tags.split(',').map(tag => (
+                  <span key={tag} className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full">{tag.trim()}</span>
+                ))}
+              </div>
+            )}
             <div className="mb-4">
-              <h4 className="text-sm font-semibold text-gray-700 mb-1">Ingredients</h4>
-              <p className="text-sm text-gray-600">{selected.ingredients}</p>
+              <h4 className="text-sm font-semibold text-gray-700 mb-2">Ingredients</h4>
+              {selected.ingredients?.length > 0 ? selected.ingredients.map((ing, i) => (
+                <span key={i} className="inline-block text-sm px-2 py-0.5 rounded-full mr-1 mb-1 bg-green-50 text-green-700">
+                  {ing.quantity > 0 ? `${parseFloat(ing.quantity).toFixed(2)} ${ing.unit || ''} ${ing.ingredient_name}`.trim() : ing.ingredient_name}
+                </span>
+              )) : selected.ingredients_text?.split(',').map((ing, i) => (
+                <span key={i} className="inline-block text-sm px-2 py-0.5 rounded-full mr-1 mb-1 bg-green-50 text-green-700">{ing.trim()}</span>
+              ))}
             </div>
-            <div>
+            <div className="mb-6">
               <h4 className="text-sm font-semibold text-gray-700 mb-1">Instructions</h4>
               <p className="text-sm text-gray-600 leading-relaxed">{selected.instructions}</p>
             </div>
+            <button onClick={async () => {
+              const cookRes = await fetch(`${API}/api/recipes/${selected.id}/cook`, { method: 'POST', headers: authHeaders() });
+              const cookData = await cookRes.json();
+              setSelected(null);
+              notify(`Recipe cooked — points awarded!${cookData.reduced?.length ? ` Pantry updated: ${cookData.reduced.join(', ')}.` : ''}`);
+            }} className="w-full bg-green-500 text-white py-3 rounded-xl font-medium">I cooked this!</button>
           </div>
         </div>
       )}
