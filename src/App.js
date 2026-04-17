@@ -109,7 +109,7 @@ return (
             <label className="text-sm font-medium text-gray-700">Full name</label>
             <input value={name} onChange={e => setName(e.target.value)}
               className="mt-1 w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 outline-none"
-              placeholder="Rachel Salandy" />
+              placeholder="Your Name" />
           </div>
         )}
         <div className="mb-4">
