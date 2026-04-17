@@ -139,77 +139,265 @@ return (
 
 // ── Demo patients — shown to all dietitian logins ─────────────────────────
 const DEMO_PATIENTS = [
+  // ── Demo 1: 1 NCD — Type 2 Diabetes ─────────────────────────────────────────
   {
-    userId:   'demo-1',
-    name:     'Aaliyah Ramsaran',
-    email:    'a.ramsaran@demo.wasteless.tt',
-    isDemo:   true,
+    userId: 'demo-1',
+    name:   'Aaliyah Ramsaran',
+    email:  'a.ramsaran@demo.wasteless.tt',
+    isDemo: true,
     items: [
-      { name: 'Dasheen',         days_left: 2,  quantity: 1.5, unit: 'kg'     },
-      { name: 'Chicken',         days_left: 1,  quantity: 2,   unit: 'kg'     },
-      { name: 'Carib Full Cream Milk', days_left: 3, quantity: 1, unit: 'litre' },
-      { name: 'Brown Rice',      days_left: 60, quantity: 1,   unit: 'bag'    },
-      { name: 'Lentils',         days_left: 90, quantity: 500, unit: 'g'      },
-      { name: 'Canola Oil',      days_left: 120,quantity: 1,   unit: 'bottle' },
-      { name: 'Chief Pepper Sauce', days_left: 200, quantity: 1, unit: 'bottle' },
+      { name: 'Dasheen',       days_left: 2,   quantity: 1.5, unit: 'kg'     },
+      { name: 'Chicken',       days_left: 1,   quantity: 2,   unit: 'kg'     },
+      { name: 'Full Cream Milk', days_left: 3, quantity: 1,   unit: 'litre'  },
+      { name: 'Brown Rice',    days_left: 60,  quantity: 1,   unit: 'bag'    },
+      { name: 'Lentils',       days_left: 90,  quantity: 500, unit: 'g'      },
+      { name: 'Canola Oil',    days_left: 120, quantity: 1,   unit: 'bottle' },
+      { name: 'Pepper Sauce',  days_left: 200, quantity: 1,   unit: 'bottle' },
     ],
     wasteLog: [
-      { action: 'used',   item_name: 'Chicken',   date: '2026-04-08' },
-      { action: 'used',   item_name: 'Dasheen',   date: '2026-04-07' },
-      { action: 'wasted', item_name: 'Tomatoes',  date: '2026-04-06' },
-      { action: 'used',   item_name: 'Lentils',   date: '2026-04-05' },
-      { action: 'wasted', item_name: 'Bread',     date: '2026-04-04' },
+      { action: 'used',   item_name: 'Chicken',    date: '2026-04-08' },
+      { action: 'used',   item_name: 'Dasheen',    date: '2026-04-07' },
+      { action: 'wasted', item_name: 'Tomatoes',   date: '2026-04-06' },
+      { action: 'used',   item_name: 'Lentils',    date: '2026-04-05' },
+      { action: 'wasted', item_name: 'Bread',      date: '2026-04-04' },
       { action: 'used',   item_name: 'Brown Rice', date: '2026-04-03' },
     ],
     messages: [],
-    currentGoal: 'Reduce processed food intake. Aim for 3 home-cooked meals per day.',
+    currentGoal: 'Reduce refined carbohydrate intake. Target fasting glucose below 7.0 mmol/L. Aim for 3 balanced home-cooked meals per day.',
+    profile: {
+      dob: '1985-03-14', gender: 'Female', mrn: 'DM-00124',
+      phone: '868-472-3301', address: 'Arima, Trinidad',
+      referralReason: 'Newly diagnosed Type 2 Diabetes — glycaemic management and dietary education',
+      anthropometrics: { height: '162 cm', weight: '84 kg', bmi: '32.0', goalWeight: '72 kg', weightHistory: 'Gained 6 kg over past 18 months' },
+      biochemical: [
+        { test: 'HbA1c',          result: '8.4%',          reference: '<7.0%',         flag: 'High' },
+        { test: 'Fasting Glucose',result: '9.2 mmol/L',    reference: '3.9–5.5 mmol/L',flag: 'High' },
+        { test: 'LDL Cholesterol',result: '3.1 mmol/L',    reference: '<2.6 mmol/L',   flag: 'High' },
+        { test: 'HDL Cholesterol',result: '1.0 mmol/L',    reference: '>1.2 mmol/L',   flag: 'Low'  },
+        { test: 'Triglycerides',  result: '2.4 mmol/L',    reference: '<1.7 mmol/L',   flag: 'High' },
+        { test: 'eGFR',           result: '74 mL/min',     reference: '>60 mL/min',    flag: 'Normal'},
+      ],
+      diagnoses: ['Type 2 Diabetes Mellitus (diagnosed March 2026)'],
+      medications: ['Metformin 500 mg twice daily'],
+      allergies: 'NKDA',
+      dietaryRecall: 'Breakfast: hops bread with butter and sweet tea. Lunch: rice, stew chicken, macaroni pie. Dinner: leftovers or fast food 3–4×/week. Snacks: biscuits, soft drinks.',
+      lifestyle: { activity: 'Sedentary — desk job, no structured exercise', sleep: '6 hrs/night', stress: 'Moderate (work-related)', smoking: 'Non-smoker', alcohol: 'Occasional — 1–2 drinks/week' },
+      foodSecurity: { budget: 'TTD $1,200/week', cookingAbility: 'Moderate — cooks 4–5×/week', access: 'Supermarket 10 min away' },
+      nfpf: 'BMI 32.0 (obese class I). No visible muscle wasting. Mild central adiposity.',
+      pes: 'Excessive carbohydrate intake (NI-5.8.2) related to low nutritional knowledge and frequent consumption of refined carbohydrates as evidenced by HbA1c 8.4% and fasting glucose 9.2 mmol/L.',
+      prescription: 'Energy: 1,600–1,700 kcal/day. Carbohydrate: 45–50% total energy, emphasising low-GI sources. Protein: 1.0 g/kg body weight. Fat: <30% total energy, limit saturated fat. Increase dietary fibre to 25–30 g/day. Eliminate sugar-sweetened beverages. Education on carbohydrate counting and glycaemic index.',
+      followUp: 'Review in 8 weeks. Monitor HbA1c and fasting glucose. Reassess diet recall and weight.',
+      referrals: 'Referred to diabetes educator and physiotherapist for structured exercise plan.',
+      consentDate: '2026-03-28', dietitianSignature: 'RD L. Balkaran', lastUpdated: '2026-04-10',
+    },
   },
+  // ── Demo 2: 1 NCD — Hypertension ────────────────────────────────────────────
   {
-    userId:   'demo-2',
-    name:     'Marcus Phillip',
-    email:    'm.phillip@demo.wasteless.tt',
-    isDemo:   true,
+    userId: 'demo-2',
+    name:   'Marcus Phillip',
+    email:  'm.phillip@demo.wasteless.tt',
+    isDemo: true,
     items: [
-      { name: 'Saltfish',        days_left: -1, quantity: 200, unit: 'g'      },
-      { name: 'Plantain',        days_left: 4,  quantity: 3,   unit: 'item'   },
-      { name: 'Coconut Milk',    days_left: 180,quantity: 1,   unit: 'tin'    },
-      { name: 'Sweet Potato',    days_left: 10, quantity: 1,   unit: 'kg'     },
-      { name: 'Oats',            days_left: 90, quantity: 1,   unit: 'pack'   },
+      { name: 'Saltfish',     days_left: -1,  quantity: 200, unit: 'g'    },
+      { name: 'Plantain',     days_left: 4,   quantity: 3,   unit: 'item' },
+      { name: 'Coconut Milk', days_left: 180, quantity: 1,   unit: 'tin'  },
+      { name: 'Sweet Potato', days_left: 10,  quantity: 1,   unit: 'kg'   },
+      { name: 'Oats',         days_left: 90,  quantity: 1,   unit: 'pack' },
     ],
     wasteLog: [
-      { action: 'wasted', item_name: 'Saltfish',   date: '2026-04-09' },
-      { action: 'wasted', item_name: 'Lettuce',    date: '2026-04-07' },
-      { action: 'used',   item_name: 'Plantain',   date: '2026-04-06' },
-      { action: 'wasted', item_name: 'Tomatoes',   date: '2026-04-05' },
-      { action: 'used',   item_name: 'Oats',       date: '2026-04-04' },
-      { action: 'wasted', item_name: 'Sweet Potato', date: '2026-04-03' },
+      { action: 'wasted', item_name: 'Saltfish',    date: '2026-04-09' },
+      { action: 'wasted', item_name: 'Lettuce',     date: '2026-04-07' },
+      { action: 'used',   item_name: 'Plantain',    date: '2026-04-06' },
+      { action: 'wasted', item_name: 'Tomatoes',    date: '2026-04-05' },
+      { action: 'used',   item_name: 'Oats',        date: '2026-04-04' },
+      { action: 'wasted', item_name: 'Sweet Potato',date: '2026-04-03' },
     ],
     messages: [],
-    currentGoal: '',
+    currentGoal: 'Adopt DASH dietary pattern. Reduce sodium to under 2,000 mg/day. Increase potassium-rich foods.',
+    profile: {
+      dob: '1972-09-02', gender: 'Male', mrn: 'HT-00287',
+      phone: '868-623-7714', address: 'Chaguanas, Trinidad',
+      referralReason: 'Stage 2 Hypertension — dietary sodium reduction and DASH diet counselling',
+      anthropometrics: { height: '178 cm', weight: '97 kg', bmi: '30.6', goalWeight: '85 kg', weightHistory: 'Weight stable over 2 years; central obesity noted' },
+      biochemical: [
+        { test: 'Blood Pressure',  result: '158/98 mmHg',  reference: '<130/80 mmHg', flag: 'High'   },
+        { test: 'Sodium',          result: '142 mmol/L',   reference: '136–145 mmol/L',flag: 'Normal' },
+        { test: 'Potassium',       result: '3.4 mmol/L',   reference: '3.5–5.0 mmol/L',flag: 'Low'   },
+        { test: 'Creatinine',      result: '98 µmol/L',    reference: '62–106 µmol/L', flag: 'Normal' },
+        { test: 'Total Cholesterol',result: '5.8 mmol/L',  reference: '<5.2 mmol/L',  flag: 'High'   },
+        { test: 'Fasting Glucose', result: '5.4 mmol/L',   reference: '3.9–5.5 mmol/L',flag: 'Normal'},
+      ],
+      diagnoses: ['Essential Hypertension Stage 2 (diagnosed 2021)'],
+      medications: ['Amlodipine 10 mg once daily', 'Hydrochlorothiazide 25 mg once daily'],
+      allergies: 'NKDA',
+      dietaryRecall: 'Breakfast: saltfish buljol with hops bread. Lunch: pelau or macaroni pie with fried chicken. Dinner: doubles or take-out. High processed/salty food intake daily. Minimal fruit and vegetables.',
+      lifestyle: { activity: 'Light — walks 20 min occasionally', sleep: '7 hrs/night', stress: 'High (financial pressures)', smoking: 'Ex-smoker (quit 2019)', alcohol: 'Moderate — 5–6 beers/week' },
+      foodSecurity: { budget: 'TTD $900/week', cookingAbility: 'Basic — partner cooks most meals', access: 'Market and supermarket within 15 min' },
+      nfpf: 'BMI 30.6 (obese class I). Central adiposity. No peripheral oedema. Skin turgor normal.',
+      pes: 'Excessive sodium intake (NI-5.10.2) related to frequent consumption of processed and salted foods as evidenced by blood pressure 158/98 mmHg and reported dietary pattern.',
+      prescription: 'Energy: 2,000–2,100 kcal/day. Sodium: ≤2,000 mg/day — eliminate added salt, avoid processed meats and saltfish >1×/week. DASH dietary pattern: increase fruits, vegetables, low-fat dairy, whole grains. Potassium target: 3,500–4,700 mg/day. Limit alcohol to ≤2 standard drinks/day.',
+      followUp: 'Review in 6 weeks. Blood pressure monitoring at each visit. 24-hour dietary recall reassessment.',
+      referrals: 'Co-managed with GP. Referred to physiotherapist for structured aerobic programme.',
+      consentDate: '2026-03-15', dietitianSignature: 'RD L. Balkaran', lastUpdated: '2026-04-08',
+    },
   },
+  // ── Demo 3: 2 Related NCDs — Type 2 Diabetes + Dyslipidaemia ────────────────
   {
-    userId:   'demo-3',
-    name:     'Priya Maharaj',
-    email:    'p.maharaj@demo.wasteless.tt',
-    isDemo:   true,
+    userId: 'demo-3',
+    name:   'Priya Maharaj',
+    email:  'p.maharaj@demo.wasteless.tt',
+    isDemo: true,
     items: [
-      { name: 'Basmati Rice',    days_left: 180,quantity: 2,   unit: 'kg'     },
-      { name: 'Channa',          days_left: 365,quantity: 500, unit: 'g'      },
-      { name: 'Pumpkin',         days_left: 5,  quantity: 1,   unit: 'kg'     },
-      { name: 'Mango',           days_left: 3,  quantity: 4,   unit: 'item'   },
-      { name: 'Yoghurt',         days_left: 2,  quantity: 500, unit: 'g'      },
-      { name: 'Spinach',         days_left: 1,  quantity: 1,   unit: 'bunch'  },
+      { name: 'Basmati Rice', days_left: 180, quantity: 2,   unit: 'kg'    },
+      { name: 'Channa',       days_left: 365, quantity: 500, unit: 'g'     },
+      { name: 'Pumpkin',      days_left: 5,   quantity: 1,   unit: 'kg'    },
+      { name: 'Mango',        days_left: 3,   quantity: 4,   unit: 'item'  },
+      { name: 'Yoghurt',      days_left: 2,   quantity: 500, unit: 'g'     },
+      { name: 'Spinach',      days_left: 1,   quantity: 1,   unit: 'bunch' },
     ],
     wasteLog: [
-      { action: 'used',   item_name: 'Spinach',    date: '2026-04-09' },
-      { action: 'used',   item_name: 'Channa',     date: '2026-04-08' },
-      { action: 'used',   item_name: 'Pumpkin',    date: '2026-04-07' },
-      { action: 'used',   item_name: 'Mango',      date: '2026-04-06' },
-      { action: 'wasted', item_name: 'Yoghurt',    date: '2026-04-05' },
+      { action: 'used',   item_name: 'Spinach',      date: '2026-04-09' },
+      { action: 'used',   item_name: 'Channa',       date: '2026-04-08' },
+      { action: 'used',   item_name: 'Pumpkin',      date: '2026-04-07' },
+      { action: 'used',   item_name: 'Mango',        date: '2026-04-06' },
+      { action: 'wasted', item_name: 'Yoghurt',      date: '2026-04-05' },
       { action: 'used',   item_name: 'Basmati Rice', date: '2026-04-04' },
     ],
     messages: [],
-    currentGoal: 'Maintain vegetarian diet. Increase protein intake through legumes.',
+    currentGoal: 'Maintain vegetarian diet. Increase soluble fibre. Target HbA1c below 7.0% and LDL below 2.0 mmol/L.',
+    profile: {
+      dob: '1968-11-25', gender: 'Female', mrn: 'DL-00341',
+      phone: '868-665-4409', address: 'Penal, Trinidad',
+      referralReason: 'Type 2 Diabetes with concurrent dyslipidaemia — integrated dietary management',
+      anthropometrics: { height: '155 cm', weight: '76 kg', bmi: '31.6', goalWeight: '65 kg', weightHistory: 'Gradual weight gain of 10 kg over 5 years' },
+      biochemical: [
+        { test: 'HbA1c',           result: '8.9%',        reference: '<7.0%',          flag: 'High'  },
+        { test: 'Fasting Glucose', result: '10.1 mmol/L', reference: '3.9–5.5 mmol/L', flag: 'High'  },
+        { test: 'LDL Cholesterol', result: '4.2 mmol/L',  reference: '<2.0 mmol/L',    flag: 'High'  },
+        { test: 'HDL Cholesterol', result: '0.9 mmol/L',  reference: '>1.2 mmol/L',    flag: 'Low'   },
+        { test: 'Triglycerides',   result: '3.1 mmol/L',  reference: '<1.7 mmol/L',    flag: 'High'  },
+        { test: 'Total Cholesterol',result: '6.4 mmol/L', reference: '<5.2 mmol/L',    flag: 'High'  },
+        { test: 'eGFR',            result: '68 mL/min',   reference: '>60 mL/min',     flag: 'Normal'},
+      ],
+      diagnoses: ['Type 2 Diabetes Mellitus (diagnosed 2019)', 'Mixed Dyslipidaemia (diagnosed 2021)'],
+      medications: ['Metformin 1 g twice daily', 'Glibenclamide 5 mg once daily', 'Atorvastatin 20 mg at night'],
+      allergies: 'Penicillin (rash)',
+      dietaryRecall: 'Vegetarian. Breakfast: roti with dhal. Lunch: rice, channa curry, fried plantain, mango achar. Dinner: dal and rice or bread. High carbohydrate load; cooking oil used liberally (coconut/vegetable oil).',
+      lifestyle: { activity: 'Minimal — housewife, sedentary most of day', sleep: '7–8 hrs/night', stress: 'Low–moderate', smoking: 'Non-smoker', alcohol: 'None' },
+      foodSecurity: { budget: 'TTD $800/week', cookingAbility: 'Excellent — cooks all meals at home', access: 'Local market twice weekly' },
+      nfpf: 'BMI 31.6 (obese class I). Mild xanthelasma noted around eyes. No peripheral neuropathy signs. Skin and hair in good condition.',
+      pes: 'Excessive fat and carbohydrate intake (NI-5.6.2, NI-5.8.2) related to traditional dietary pattern high in refined carbohydrates and saturated/trans fats as evidenced by HbA1c 8.9%, LDL 4.2 mmol/L, and triglycerides 3.1 mmol/L.',
+      prescription: 'Energy: 1,500–1,600 kcal/day. Carbohydrate: 40–45% total energy, low-GI only. Fat: <25% total energy — replace coconut oil with canola/olive oil; eliminate trans fats. Soluble fibre: 10–15 g/day (oats, legumes, vegetables). Cholesterol: <200 mg/day. Protein: 1.0–1.2 g/kg. Plant sterols via food sources.',
+      followUp: 'Review in 6 weeks. Repeat lipid panel and HbA1c at 3 months. Track dietary oil usage.',
+      referrals: 'Co-managed with endocrinologist. Eye referral for xanthelasma evaluation.',
+      consentDate: '2026-02-10', dietitianSignature: 'RD L. Balkaran', lastUpdated: '2026-04-09',
+    },
+  },
+  // ── Demo 4: 2 Related NCDs — Hypertension + Chronic Kidney Disease Stage 3 ──
+  {
+    userId: 'demo-4',
+    name:   'Desmond Charles',
+    email:  'd.charles@demo.wasteless.tt',
+    isDemo: true,
+    items: [
+      { name: 'Chicken Breast', days_left: 2,   quantity: 1,   unit: 'kg'   },
+      { name: 'White Rice',     days_left: 180, quantity: 2,   unit: 'kg'   },
+      { name: 'Cucumber',       days_left: 4,   quantity: 2,   unit: 'item' },
+      { name: 'Cabbage',        days_left: 7,   quantity: 1,   unit: 'head' },
+      { name: 'Apple',          days_left: 5,   quantity: 4,   unit: 'item' },
+      { name: 'Olive Oil',      days_left: 365, quantity: 1,   unit: 'bottle'},
+    ],
+    wasteLog: [
+      { action: 'used',   item_name: 'Chicken Breast', date: '2026-04-10' },
+      { action: 'used',   item_name: 'Cabbage',        date: '2026-04-09' },
+      { action: 'wasted', item_name: 'Cucumber',       date: '2026-04-08' },
+      { action: 'used',   item_name: 'White Rice',     date: '2026-04-07' },
+      { action: 'used',   item_name: 'Apple',          date: '2026-04-06' },
+      { action: 'wasted', item_name: 'Tomatoes',       date: '2026-04-04' },
+    ],
+    messages: [],
+    currentGoal: 'Maintain protein restriction at 0.8 g/kg. Limit potassium and phosphorus. Keep sodium below 1,500 mg/day.',
+    profile: {
+      dob: '1958-06-18', gender: 'Male', mrn: 'CK-00512',
+      phone: '868-758-2290', address: 'San Fernando, Trinidad',
+      referralReason: 'CKD Stage 3 with co-existing hypertension — renal dietary management',
+      anthropometrics: { height: '170 cm', weight: '88 kg', bmi: '30.5', goalWeight: '78 kg', weightHistory: 'Lost 4 kg unintentionally over 6 months — monitored' },
+      biochemical: [
+        { test: 'Blood Pressure',  result: '162/100 mmHg', reference: '<130/80 mmHg',  flag: 'High'  },
+        { test: 'eGFR',            result: '38 mL/min',    reference: '>60 mL/min',    flag: 'Low'   },
+        { test: 'Creatinine',      result: '198 µmol/L',   reference: '62–106 µmol/L', flag: 'High'  },
+        { test: 'Serum Potassium', result: '5.6 mmol/L',   reference: '3.5–5.0 mmol/L',flag: 'High'  },
+        { test: 'Serum Phosphorus',result: '1.7 mmol/L',   reference: '0.8–1.5 mmol/L',flag: 'High'  },
+        { test: 'Serum Albumin',   result: '33 g/L',       reference: '35–50 g/L',     flag: 'Low'   },
+        { test: 'Haemoglobin',     result: '10.2 g/dL',    reference: '13.5–17.5 g/dL',flag: 'Low'   },
+      ],
+      diagnoses: ['Essential Hypertension Stage 2 (diagnosed 2015)', 'Chronic Kidney Disease Stage 3b (diagnosed 2023)'],
+      medications: ['Ramipril 10 mg once daily', 'Furosemide 40 mg once daily', 'Calcium carbonate 500 mg with meals (phosphate binder)', 'Erythropoietin injection monthly'],
+      allergies: 'Sulfonamides (urticaria)',
+      dietaryRecall: 'Breakfast: cornflakes with milk and banana. Lunch: stew beef with rice and provisions. Dinner: bake and saltfish or soup. High potassium foods (banana, provisions) consumed daily. Processed meat 3–4×/week.',
+      lifestyle: { activity: 'Light — retired, short walks only', sleep: '8 hrs/night', stress: 'Moderate (health anxiety)', smoking: 'Non-smoker', alcohol: 'Rare — occasional beer' },
+      foodSecurity: { budget: 'TTD $700/week (pension)', cookingAbility: 'Good — wife manages cooking', access: 'Supermarket 20 min by car' },
+      nfpf: 'Mild pallor consistent with anaemia. Mild bilateral ankle oedema. Dry skin. No muscle wasting at present — monitor closely.',
+      pes: 'Excessive mineral intake — potassium and phosphorus (NI-5.10.1, NI-5.10.2) related to inadequate knowledge of renal dietary restrictions as evidenced by serum potassium 5.6 mmol/L, serum phosphorus 1.7 mmol/L, and eGFR 38 mL/min.',
+      prescription: 'Energy: 1,800–1,900 kcal/day (30–35 kcal/kg IBW). Protein: 0.8 g/kg/day — restrict animal protein. Potassium: <2,000 mg/day — avoid banana, provisions, tomatoes, legumes. Phosphorus: <800 mg/day — avoid dairy, nuts, cola drinks, processed foods. Sodium: ≤1,500 mg/day. Fluid: 1.5 L/day or as per clinical guidance.',
+      followUp: 'Monthly review. Repeat renal function panel and electrolytes in 4 weeks. Dietitian-nephrology co-management.',
+      referrals: 'Nephrology (Dr. A. Lakhan). Anaemia management with GP.',
+      consentDate: '2026-01-20', dietitianSignature: 'RD L. Balkaran', lastUpdated: '2026-04-11',
+    },
+  },
+  // ── Demo 5: Healthy ──────────────────────────────────────────────────────────
+  {
+    userId: 'demo-5',
+    name:   'Kezia Thomas',
+    email:  'k.thomas@demo.wasteless.tt',
+    isDemo: true,
+    items: [
+      { name: 'Chicken Breast', days_left: 3,   quantity: 1.5, unit: 'kg'    },
+      { name: 'Broccoli',       days_left: 4,   quantity: 1,   unit: 'head'  },
+      { name: 'Sweet Potato',   days_left: 14,  quantity: 1,   unit: 'kg'    },
+      { name: 'Greek Yoghurt',  days_left: 6,   quantity: 500, unit: 'g'     },
+      { name: 'Oats',           days_left: 90,  quantity: 1,   unit: 'pack'  },
+      { name: 'Avocado',        days_left: 2,   quantity: 2,   unit: 'item'  },
+      { name: 'Eggs',           days_left: 14,  quantity: 12,  unit: 'item'  },
+    ],
+    wasteLog: [
+      { action: 'used',   item_name: 'Chicken Breast', date: '2026-04-11' },
+      { action: 'used',   item_name: 'Broccoli',       date: '2026-04-10' },
+      { action: 'used',   item_name: 'Avocado',        date: '2026-04-09' },
+      { action: 'used',   item_name: 'Sweet Potato',   date: '2026-04-08' },
+      { action: 'used',   item_name: 'Eggs',           date: '2026-04-07' },
+      { action: 'used',   item_name: 'Greek Yoghurt',  date: '2026-04-06' },
+    ],
+    messages: [],
+    currentGoal: 'Maintain current healthy dietary pattern. Continue resistance training 3×/week and 150 min moderate cardio weekly.',
+    profile: {
+      dob: '1998-07-30', gender: 'Female', mrn: 'WL-00089',
+      phone: '868-490-1187', address: 'Port of Spain, Trinidad',
+      referralReason: 'Voluntary wellness referral — sports nutrition guidance for recreational athlete',
+      anthropometrics: { height: '167 cm', weight: '62 kg', bmi: '22.2', goalWeight: '62 kg (maintain)', weightHistory: 'Weight stable for 3 years' },
+      biochemical: [
+        { test: 'HbA1c',           result: '5.1%',        reference: '<5.7%',          flag: 'Normal' },
+        { test: 'Fasting Glucose', result: '4.8 mmol/L',  reference: '3.9–5.5 mmol/L', flag: 'Normal' },
+        { test: 'Total Cholesterol',result: '4.1 mmol/L', reference: '<5.2 mmol/L',    flag: 'Normal' },
+        { test: 'LDL Cholesterol', result: '2.0 mmol/L',  reference: '<2.6 mmol/L',    flag: 'Normal' },
+        { test: 'HDL Cholesterol', result: '1.8 mmol/L',  reference: '>1.2 mmol/L',    flag: 'Normal' },
+        { test: 'Haemoglobin',     result: '13.2 g/dL',   reference: '12.0–16.0 g/dL', flag: 'Normal' },
+        { test: 'Serum Ferritin',  result: '28 µg/L',     reference: '12–150 µg/L',    flag: 'Normal' },
+        { test: 'Vitamin D',       result: '52 nmol/L',   reference: '50–125 nmol/L',  flag: 'Normal' },
+      ],
+      diagnoses: ['No current medical diagnoses'],
+      medications: ['Multivitamin once daily (self-initiated)'],
+      allergies: 'NKDA',
+      dietaryRecall: 'Breakfast: oats with fruit and Greek yoghurt. Lunch: grilled chicken, sweet potato, and salad. Dinner: stir-fry vegetables with eggs or fish. Snacks: avocado toast, nuts, or fruit. Hydration: 2.5 L water/day.',
+      lifestyle: { activity: 'Active — gym 3×/week (resistance), runs 5 km twice weekly', sleep: '8 hrs/night', stress: 'Low', smoking: 'Non-smoker', alcohol: 'Rare — social occasions only' },
+      foodSecurity: { budget: 'TTD $600/week', cookingAbility: 'Excellent — meal preps on Sundays', access: 'Farmers market weekly, supermarket nearby' },
+      nfpf: 'BMI 22.2 (healthy range). Good muscle tone. Skin, hair, and nails in excellent condition. No signs of nutritional deficiency.',
+      pes: 'No active nutrition diagnosis. Optimise sports nutrition to support training performance and recovery.',
+      prescription: 'Energy: 2,100–2,200 kcal/day on training days; 1,900 kcal on rest days. Carbohydrate: 50–55% total energy — time intake around training. Protein: 1.4–1.6 g/kg/day — distribute across 4–5 meals. Fat: 25–30% total energy, emphasise unsaturated sources. Pre-workout: complex carb + lean protein 1–2 hrs prior. Post-workout: 20–25 g protein within 30 min. Iron monitoring — menstruating female athlete.',
+      followUp: 'Review in 3 months or if training load changes significantly.',
+      referrals: 'No referrals required at this time.',
+      consentDate: '2026-04-01', dietitianSignature: 'RD L. Balkaran', lastUpdated: '2026-04-12',
+    },
   },
 ];
 
@@ -222,7 +410,7 @@ function DietitianDashboard({ currentUser, onLogout, dbRecipes, config }) {
   const [goal, setGoal]                   = useState('');
   const [mealPlan, setMealPlan]           = useState({});
   const [notification, setNotification]   = useState('');
-  const [demoMessages, setDemoMessages]   = useState({ 'demo-1': [], 'demo-2': [], 'demo-3': [] });
+  const [demoMessages, setDemoMessages]   = useState({ 'demo-1': [], 'demo-2': [], 'demo-3': [], 'demo-4': [], 'demo-5': [] });
 
   const DAYS  = config.days;
   const SLOTS = config.mealSlots;
@@ -361,7 +549,7 @@ function DietitianDashboard({ currentUser, onLogout, dbRecipes, config }) {
                 )}
               </div>
               <div className="flex gap-2 mb-6 flex-wrap">
-                {['overview','messages','mealplan','goals','recipes'].map(t => (
+                {['overview','profile','messages','mealplan','goals','recipes'].map(t => (
                   <button key={t} onClick={() => setActiveTab(t)}
                     className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${activeTab === t ? 'bg-green-500 text-white' : 'bg-white border text-gray-600 hover:bg-gray-50'}`}>
                     {t.charAt(0).toUpperCase() + t.slice(1)}
@@ -406,6 +594,118 @@ function DietitianDashboard({ currentUser, onLogout, dbRecipes, config }) {
                   </div>
                 </div>
               )}
+              {activeTab === 'profile' && (() => {
+                const p = selected?.profile;
+                if (!p) return <div className="bg-white rounded-xl p-6 border"><p className="text-sm text-gray-400">No profile data available for this patient.</p></div>;
+                const flagColor = f => f === 'High' ? 'text-red-600 bg-red-50' : f === 'Low' ? 'text-amber-600 bg-amber-50' : 'text-green-700 bg-green-50';
+                return (
+                  <div className="space-y-4">
+                    {/* Demographics */}
+                    <div className="bg-white rounded-xl p-5 border">
+                      <h3 className="font-semibold text-gray-800 mb-3 text-sm uppercase tracking-wide">Demographics &amp; Referral</h3>
+                      <div className="grid grid-cols-2 md:grid-cols-3 gap-3 text-sm">
+                        {[['MRN', p.mrn], ['Date of Birth', p.dob], ['Gender', p.gender], ['Phone', p.phone], ['Address', p.address], ['Consent Date', p.consentDate]].map(([k, v]) => (
+                          <div key={k}><p className="text-xs text-gray-400">{k}</p><p className="font-medium text-gray-700">{v}</p></div>
+                        ))}
+                      </div>
+                      <div className="mt-3 pt-3 border-t">
+                        <p className="text-xs text-gray-400 mb-1">Reason for Referral</p>
+                        <p className="text-sm text-gray-700">{p.referralReason}</p>
+                      </div>
+                    </div>
+                    {/* Diagnoses & Medications */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="bg-white rounded-xl p-5 border">
+                        <h3 className="font-semibold text-gray-800 mb-3 text-sm uppercase tracking-wide">Diagnoses</h3>
+                        {p.diagnoses.map((d, i) => <p key={i} className="text-sm text-gray-700 py-1 border-b last:border-0">{d}</p>)}
+                        <div className="mt-3 pt-3 border-t">
+                          <p className="text-xs text-gray-400 mb-1">Allergies / Intolerances</p>
+                          <p className="text-sm text-gray-700">{p.allergies}</p>
+                        </div>
+                      </div>
+                      <div className="bg-white rounded-xl p-5 border">
+                        <h3 className="font-semibold text-gray-800 mb-3 text-sm uppercase tracking-wide">Medications</h3>
+                        {p.medications.map((m, i) => <p key={i} className="text-sm text-gray-700 py-1 border-b last:border-0">{m}</p>)}
+                      </div>
+                    </div>
+                    {/* Anthropometrics */}
+                    <div className="bg-white rounded-xl p-5 border">
+                      <h3 className="font-semibold text-gray-800 mb-3 text-sm uppercase tracking-wide">Anthropometrics</h3>
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
+                        {[['Height', p.anthropometrics.height], ['Weight', p.anthropometrics.weight], ['BMI', p.anthropometrics.bmi], ['Goal Weight', p.anthropometrics.goalWeight]].map(([k, v]) => (
+                          <div key={k} className="bg-gray-50 rounded-lg p-3 text-center">
+                            <p className="text-xs text-gray-400 mb-1">{k}</p>
+                            <p className="font-bold text-gray-800">{v}</p>
+                          </div>
+                        ))}
+                      </div>
+                      <p className="text-xs text-gray-500 mt-3">{p.anthropometrics.weightHistory}</p>
+                    </div>
+                    {/* Biochemical */}
+                    <div className="bg-white rounded-xl p-5 border">
+                      <h3 className="font-semibold text-gray-800 mb-3 text-sm uppercase tracking-wide">Biochemical Data</h3>
+                      <table className="w-full text-sm">
+                        <thead><tr className="bg-gray-50 text-xs text-gray-500"><th className="p-2 text-left">Test</th><th className="p-2 text-left">Result</th><th className="p-2 text-left">Reference</th><th className="p-2 text-left">Flag</th></tr></thead>
+                        <tbody>
+                          {p.biochemical.map((b, i) => (
+                            <tr key={i} className="border-t">
+                              <td className="p-2 text-gray-700">{b.test}</td>
+                              <td className="p-2 font-medium text-gray-800">{b.result}</td>
+                              <td className="p-2 text-gray-400">{b.reference}</td>
+                              <td className="p-2"><span className={`text-xs px-2 py-0.5 rounded-full font-medium ${flagColor(b.flag)}`}>{b.flag}</span></td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                    {/* Dietary & Lifestyle */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="bg-white rounded-xl p-5 border">
+                        <h3 className="font-semibold text-gray-800 mb-3 text-sm uppercase tracking-wide">24-Hour Dietary Recall</h3>
+                        <p className="text-sm text-gray-700 leading-relaxed">{p.dietaryRecall}</p>
+                        <div className="mt-3 pt-3 border-t">
+                          <p className="text-xs text-gray-400 mb-1">Nutrition-Focused Physical Findings</p>
+                          <p className="text-sm text-gray-700">{p.nfpf}</p>
+                        </div>
+                      </div>
+                      <div className="bg-white rounded-xl p-5 border">
+                        <h3 className="font-semibold text-gray-800 mb-3 text-sm uppercase tracking-wide">Lifestyle &amp; Food Security</h3>
+                        {Object.entries(p.lifestyle).map(([k, v]) => (
+                          <div key={k} className="flex justify-between py-1.5 border-b last:border-0 text-sm">
+                            <span className="text-gray-400 capitalize">{k}</span>
+                            <span className="text-gray-700 text-right ml-4">{v}</span>
+                          </div>
+                        ))}
+                        <div className="mt-3 pt-3 border-t space-y-1">
+                          {Object.entries(p.foodSecurity).map(([k, v]) => (
+                            <div key={k} className="flex justify-between text-sm">
+                              <span className="text-gray-400 capitalize">{k.replace(/([A-Z])/g, ' $1')}</span>
+                              <span className="text-gray-700 text-right ml-4">{v}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                    {/* PES & Prescription */}
+                    <div className="bg-white rounded-xl p-5 border">
+                      <h3 className="font-semibold text-gray-800 mb-2 text-sm uppercase tracking-wide">PES Statement</h3>
+                      <p className="text-sm text-gray-700 leading-relaxed mb-4">{p.pes}</p>
+                      <h3 className="font-semibold text-gray-800 mb-2 text-sm uppercase tracking-wide">Nutrition Prescription</h3>
+                      <p className="text-sm text-gray-700 leading-relaxed">{p.prescription}</p>
+                    </div>
+                    {/* Follow-up */}
+                    <div className="bg-white rounded-xl p-5 border">
+                      <h3 className="font-semibold text-gray-800 mb-3 text-sm uppercase tracking-wide">Follow-Up &amp; Referrals</h3>
+                      <p className="text-sm text-gray-700 mb-2">{p.followUp}</p>
+                      <p className="text-sm text-gray-500">{p.referrals}</p>
+                      <div className="mt-3 pt-3 border-t flex justify-between text-xs text-gray-400">
+                        <span>Signed: {p.dietitianSignature}</span>
+                        <span>Last updated: {p.lastUpdated}</span>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
               {activeTab === 'messages' && (
                 <div className="bg-white rounded-xl p-4 border">
                   <h3 className="font-semibold text-gray-700 mb-4">Send message to {selected.name}</h3>
@@ -1303,6 +1603,7 @@ function AllRecipesTab({ API, authHeaders, notify, config }) {
   };
 
   fetchAll();
+// eslint-disable-next-line react-hooks/exhaustive-deps
 }, [search, mealType, dietTag]);
 
   return (
