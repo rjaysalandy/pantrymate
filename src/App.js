@@ -418,28 +418,33 @@ function DietitianDashboard({ currentUser, onLogout, dbRecipes, config }) {
   const [patients, setPatients]           = useState([]);
   const [selected, setSelected]           = useState(null);
   const [activeTab, setActiveTab]         = useState('overview');
+  const [mainView, setMainView]           = useState('patients'); // 'patients' | 'messages' | 'resources'
   const [msgBody, setMsgBody]             = useState('');
   const [clinicalNotes, setClinicalNotes] = useState('');
   const [goal, setGoal]                   = useState('');
   const [mealPlan, setMealPlan]           = useState({});
   const [notification, setNotification]   = useState('');
+  const [allMessages, setAllMessages]     = useState([]);
   const [demoMessages, setDemoMessages]   = useState({ 'demo-1': [], 'demo-2': [], 'demo-3': [], 'demo-4': [], 'demo-5': [] });
 
   const DAYS  = config.days;
   const SLOTS = config.mealSlots;
 
-  useEffect(() => { fetchPatients(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { fetchPatients(); fetchAllMessages(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const fetchPatients = async () => {
     const res = await fetch(`${API}/api/sharing/patients`, { headers: authHeaders() });
     const data = await res.json();
-    // Merge real patients with demo patients — demo patients always appear first
     const real = res.ok ? data : [];
     const all  = [...DEMO_PATIENTS, ...real];
     setPatients(all);
     setSelected(all[0]);
-    setClinicalNotes(all[0]?.currentGoal ? '' : '');
     setGoal(all[0]?.currentGoal || '');
+  };
+
+  const fetchAllMessages = async () => {
+    const res = await fetch(`${API}/api/messages/sent`, { headers: authHeaders() });
+    if (res.ok) setAllMessages(await res.json());
   };
 
   const selectPatient = (p) => {
@@ -449,6 +454,7 @@ function DietitianDashboard({ currentUser, onLogout, dbRecipes, config }) {
     setGoal(p.currentGoal || '');
     setMealPlan({});
     setMsgBody('');
+    setMainView('patients');
   };
 
   const notify = (msg) => { setNotification(msg); setTimeout(() => setNotification(''), 3000); };
@@ -456,7 +462,6 @@ function DietitianDashboard({ currentUser, onLogout, dbRecipes, config }) {
   const sendMessage = async () => {
     if (!msgBody.trim() || !selected) return;
     if (selected.isDemo) {
-      // For demo patients, store message locally in state
       setDemoMessages(prev => ({
         ...prev,
         [selected.userId]: [...(prev[selected.userId] || []), {
@@ -475,6 +480,7 @@ function DietitianDashboard({ currentUser, onLogout, dbRecipes, config }) {
       body: JSON.stringify({ toUserId: selected.userId, body: msgBody, type: 'reminder' })
     });
     setMsgBody(''); notify('Message sent!');
+    fetchAllMessages();
   };
 
   const saveRecord = async () => {
@@ -487,6 +493,16 @@ function DietitianDashboard({ currentUser, onLogout, dbRecipes, config }) {
     notify('Record saved!');
   };
 
+  const saveGoalForPatient = async () => {
+    if (!selected) return;
+    if (selected.isDemo) { notify('Goal saved!'); return; }
+    await fetch(`${API}/api/goals/for-patient/${selected.userId}`, {
+      method: 'POST', headers: authHeaders(),
+      body: JSON.stringify({ dietitianNote: goal, followDietitianPlan: true })
+    });
+    notify('Goal saved for patient!');
+  };
+
   const pushMealPlan = async () => {
     if (!selected) return;
     if (selected.isDemo) { notify('Meal plan pushed to patient!'); return; }
@@ -497,6 +513,16 @@ function DietitianDashboard({ currentUser, onLogout, dbRecipes, config }) {
     notify('Meal plan pushed to patient!');
   };
 
+  const recommendRecipe = async (r) => {
+    if (!selected) return;
+    if (selected.isDemo) { notify(`${r.name} recommended!`); return; }
+    await fetch(`${API}/api/recipes/${r.id}/recommend`, {
+      method: 'POST', headers: authHeaders(),
+      body: JSON.stringify({ patientId: selected.userId })
+    });
+    notify(`${r.name} recommended!`);
+  };
+
   const saveRate = (p) => {
     if (!p) return 0;
     const total = p.wasteLog?.length || 0;
@@ -505,29 +531,110 @@ function DietitianDashboard({ currentUser, onLogout, dbRecipes, config }) {
   };
 
   const recipes = dbRecipes || [];
-
-  // For demo patients, pull messages from local state
   const selectedMessages = selected?.isDemo
     ? demoMessages[selected.userId] || []
     : selected?.messages || [];
 
+  const totalPatients  = patients.length;
+  const highWaste      = patients.filter(p => saveRate(p) < 50).length;
+  const totalMessages  = allMessages.length;
+
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gray-50 flex flex-col">
       {notification && (
         <div className="fixed top-4 right-4 bg-green-500 text-white px-6 py-3 rounded-xl shadow-lg z-50">{notification}</div>
       )}
-      <div className="bg-white border-b px-6 py-4 flex justify-between items-center">
+
+      {/* ── Top bar ── */}
+      <div className="bg-white border-b px-6 py-4 flex justify-between items-center flex-shrink-0">
         <div>
           <h1 className="text-lg font-bold text-gray-800">Dietitian Portal</h1>
           <p className="text-sm text-gray-500">Welcome, {currentUser.name}</p>
         </div>
-        <button onClick={onLogout} className="text-sm text-gray-500 hover:text-red-500 px-4 py-2 border rounded-lg">Sign out</button>
+        <div className="flex items-center gap-3">
+          <button onClick={() => setMainView('resources')} className="text-xs bg-green-50 text-green-600 px-3 py-1.5 rounded-lg border border-green-200">Resources</button>
+          <button onClick={onLogout} className="text-sm text-gray-500 hover:text-red-500 px-4 py-2 border rounded-lg">Sign out</button>
+        </div>
       </div>
-      <div className="flex h-screen">
-        {/* Patient list — always visible on md+, hidden on mobile when a patient is selected */}
-        <div className={`${
-          selected ? 'hidden md:flex' : 'flex'
-        } flex-col w-full md:w-64 bg-white border-r p-4 overflow-y-auto`}>
+
+      {/* ── Summary strip ── */}
+      <div className="bg-white border-b px-6 py-3 flex gap-6 flex-shrink-0">
+        <div className="text-center">
+          <p className="text-xl font-bold text-gray-800">{totalPatients}</p>
+          <p className="text-xs text-gray-400">Patients</p>
+        </div>
+        <div className="text-center">
+          <p className="text-xl font-bold text-red-500">{highWaste}</p>
+          <p className="text-xs text-gray-400">High waste</p>
+        </div>
+        <div className="text-center">
+          <p className="text-xl font-bold text-blue-500">{patients.filter(p => saveRate(p) >= 80).length}</p>
+          <p className="text-xs text-gray-400">On track</p>
+        </div>
+        <div className="text-center">
+          <p className="text-xl font-bold text-green-500">{totalMessages}</p>
+          <p className="text-xs text-gray-400">Messages sent</p>
+        </div>
+        <button onClick={() => setMainView('messages')} className="ml-auto text-xs bg-blue-50 text-blue-600 px-3 py-1.5 rounded-lg border border-blue-200 self-center">
+          Message centre
+        </button>
+      </div>
+
+      {/* ── Resources overlay ── */}
+      {mainView === 'resources' && (
+        <div className="fixed inset-0 z-50 bg-white overflow-y-auto">
+          <div className="p-4">
+            <button onClick={() => setMainView('patients')} className="text-sm text-blue-600 font-semibold mb-4 block">← Back to patients</button>
+            <DietitianResourcePanel />
+          </div>
+        </div>
+      )}
+
+      {/* ── Message centre overlay ── */}
+      {mainView === 'messages' && (
+        <div className="fixed inset-0 z-50 bg-gray-50 overflow-y-auto">
+          <div className="max-w-2xl mx-auto p-4">
+            <button onClick={() => setMainView('patients')} className="text-sm text-blue-600 font-semibold mb-4 block">← Back to patients</button>
+            <h2 className="text-lg font-bold text-gray-800 mb-4">Message Centre</h2>
+            {patients.map(p => {
+              const msgs = p.isDemo ? (demoMessages[p.userId] || []) : (p.messages || []);
+              if (msgs.length === 0) return null;
+              return (
+                <div key={p.userId} className="bg-white rounded-xl border p-4 mb-3">
+                  <p className="font-semibold text-gray-800 mb-2 text-sm">{p.name}</p>
+                  {msgs.slice(0,3).map((m, i) => (
+                    <div key={i} className="text-sm text-gray-600 py-1.5 border-b last:border-0">
+                      <span className="text-xs text-gray-400 mr-2">{new Date(m.sent_at).toLocaleDateString()}</span>
+                      {m.body}
+                    </div>
+                  ))}
+                  <button onClick={() => { selectPatient(p); setActiveTab('messages'); }}
+                    className="mt-2 text-xs text-green-600 font-medium">Reply →</button>
+                </div>
+              );
+            })}
+            {patients.every(p => (p.isDemo ? demoMessages[p.userId]?.length === 0 : p.messages?.length === 0)) && (
+              <p className="text-sm text-gray-400 text-center py-8">No messages yet</p>
+            )}
+            <div className="bg-white rounded-xl border p-4 mt-4">
+              <h3 className="font-semibold text-gray-700 mb-3 text-sm">Send a new message</h3>
+              <select onChange={e => selectPatient(patients.find(p => String(p.userId) === e.target.value))}
+                className="w-full border rounded-lg p-2 text-sm mb-3">
+                <option value="">Select patient...</option>
+                {patients.map(p => <option key={p.userId} value={p.userId}>{p.name}</option>)}
+              </select>
+              <textarea value={msgBody} onChange={e => setMsgBody(e.target.value)} rows={3}
+                placeholder="Type your message..."
+                className="w-full border rounded-lg p-2 text-sm focus:ring-2 focus:ring-green-500 outline-none mb-2" />
+              <button onClick={sendMessage} className="w-full bg-green-500 text-white py-2 rounded-lg text-sm font-medium">Send</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div className="flex flex-1 overflow-hidden">
+        {/* ── Patient list ── */}
+        <div className={`${selected ? 'hidden md:flex' : 'flex'} flex-col w-full md:w-64 bg-white border-r p-4 overflow-y-auto`}>
           <p className="text-xs font-semibold text-gray-400 uppercase mb-3">Patients ({patients.length})</p>
           {patients.length === 0 && <p className="text-sm text-gray-400">No patients sharing data yet</p>}
           {patients.map(p => (
@@ -535,37 +642,30 @@ function DietitianDashboard({ currentUser, onLogout, dbRecipes, config }) {
               className={`w-full text-left p-3 rounded-xl mb-2 transition-all ${selected?.userId === p.userId ? 'bg-green-50 border border-green-200' : 'hover:bg-gray-50'}`}>
               <div className="flex items-center gap-2 mb-0.5">
                 <p className="font-medium text-sm text-gray-800">{p.name}</p>
-                {p.isDemo && (
-                  <span className="text-xs font-medium text-gray-400 border border-gray-200 rounded px-1.5 py-0.5 leading-none tracking-wide">Demo</span>
-                )}
+                {p.isDemo && <span className="text-xs font-medium text-gray-400 border border-gray-200 rounded px-1.5 py-0.5 leading-none">Demo</span>}
               </div>
               <p className="text-xs text-gray-400">{p.items?.length || 0} pantry items · {saveRate(p)}% save rate</p>
             </button>
           ))}
         </div>
-        {/* Detail panel — full screen on mobile, flex-1 on md+ */}
-        <div className={`${
-          selected ? 'flex' : 'hidden md:flex'
-        } flex-col flex-1 overflow-y-auto`}>
+
+        {/* ── Patient detail ── */}
+        <div className={`${selected ? 'flex' : 'hidden md:flex'} flex-col flex-1 overflow-y-auto`}>
           {!selected ? (
-            <div className="flex items-center justify-center h-full text-gray-400"><p>Select a patient to view their data</p></div>
+            <div className="flex items-center justify-center h-full text-gray-400">
+              <p>Select a patient to view their data</p>
+            </div>
           ) : (
             <div className="p-4 md:p-6">
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center gap-3">
-                  {/* Back button — mobile only */}
-                  <button
-                    onClick={() => setSelected(null)}
-                    className="md:hidden flex items-center justify-center w-8 h-8 rounded-full bg-gray-100 text-gray-600"
-                  >
+                  <button onClick={() => setSelected(null)} className="md:hidden flex items-center justify-center w-8 h-8 rounded-full bg-gray-100 text-gray-600">
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
                   </button>
                   <div>
                     <div className="flex items-center gap-2 flex-wrap">
                       <h2 className="text-lg font-bold text-gray-800">{selected.name}</h2>
-                      {selected.isDemo && (
-                        <span className="text-xs font-medium text-gray-400 border border-gray-200 rounded px-2 py-0.5 tracking-wide">Demo patient</span>
-                      )}
+                      {selected.isDemo && <span className="text-xs font-medium text-gray-400 border border-gray-200 rounded px-2 py-0.5">Demo patient</span>}
                     </div>
                     <p className="text-sm text-gray-500">{selected.email}</p>
                   </div>
@@ -576,14 +676,17 @@ function DietitianDashboard({ currentUser, onLogout, dbRecipes, config }) {
                   </div>
                 )}
               </div>
+
+              {/* Tabs — no Resources here, moved to top bar */}
               <div className="flex gap-2 mb-5 overflow-x-auto pb-1">
-                {['overview','profile','messages','mealplan','goals','recipes','resources'].map(t => (
+                {['overview','profile','messages','mealplan','goals','recipes'].map(t => (
                   <button key={t} onClick={() => setActiveTab(t)}
                     className={`flex-shrink-0 px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${activeTab === t ? 'bg-green-500 text-white' : 'bg-white border text-gray-600 hover:bg-gray-50'}`}>
                     {t.charAt(0).toUpperCase() + t.slice(1)}
                   </button>
                 ))}
               </div>
+
               {activeTab === 'overview' && (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="bg-white rounded-xl p-4 border">
@@ -622,13 +725,13 @@ function DietitianDashboard({ currentUser, onLogout, dbRecipes, config }) {
                   </div>
                 </div>
               )}
+
               {activeTab === 'profile' && (() => {
                 const p = selected?.profile;
                 if (!p) return <div className="bg-white rounded-xl p-6 border"><p className="text-sm text-gray-400">No profile data available for this patient.</p></div>;
                 const flagColor = f => f === 'High' ? 'text-red-600 bg-red-50' : f === 'Low' ? 'text-amber-600 bg-amber-50' : 'text-green-700 bg-green-50';
                 return (
                   <div className="space-y-4">
-                    {/* Demographics */}
                     <div className="bg-white rounded-xl p-5 border">
                       <h3 className="font-semibold text-gray-800 mb-3 text-sm uppercase tracking-wide">Demographics &amp; Referral</h3>
                       <div className="grid grid-cols-2 md:grid-cols-3 gap-3 text-sm">
@@ -641,7 +744,6 @@ function DietitianDashboard({ currentUser, onLogout, dbRecipes, config }) {
                         <p className="text-sm text-gray-700">{p.referralReason}</p>
                       </div>
                     </div>
-                    {/* Diagnoses & Medications */}
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div className="bg-white rounded-xl p-5 border">
                         <h3 className="font-semibold text-gray-800 mb-3 text-sm uppercase tracking-wide">Diagnoses</h3>
@@ -656,7 +758,6 @@ function DietitianDashboard({ currentUser, onLogout, dbRecipes, config }) {
                         {p.medications.map((m, i) => <p key={i} className="text-sm text-gray-700 py-1 border-b last:border-0">{m}</p>)}
                       </div>
                     </div>
-                    {/* Anthropometrics */}
                     <div className="bg-white rounded-xl p-5 border">
                       <h3 className="font-semibold text-gray-800 mb-3 text-sm uppercase tracking-wide">Anthropometrics</h3>
                       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
@@ -669,7 +770,6 @@ function DietitianDashboard({ currentUser, onLogout, dbRecipes, config }) {
                       </div>
                       <p className="text-xs text-gray-500 mt-3">{p.anthropometrics.weightHistory}</p>
                     </div>
-                    {/* Biochemical */}
                     <div className="bg-white rounded-xl p-5 border">
                       <h3 className="font-semibold text-gray-800 mb-3 text-sm uppercase tracking-wide">Biochemical Data</h3>
                       <table className="w-full text-sm">
@@ -686,7 +786,6 @@ function DietitianDashboard({ currentUser, onLogout, dbRecipes, config }) {
                         </tbody>
                       </table>
                     </div>
-                    {/* Dietary & Lifestyle */}
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div className="bg-white rounded-xl p-5 border">
                         <h3 className="font-semibold text-gray-800 mb-3 text-sm uppercase tracking-wide">24-Hour Dietary Recall</h3>
@@ -714,14 +813,12 @@ function DietitianDashboard({ currentUser, onLogout, dbRecipes, config }) {
                         </div>
                       </div>
                     </div>
-                    {/* PES & Prescription */}
                     <div className="bg-white rounded-xl p-5 border">
                       <h3 className="font-semibold text-gray-800 mb-2 text-sm uppercase tracking-wide">PES Statement</h3>
                       <p className="text-sm text-gray-700 leading-relaxed mb-4">{p.pes}</p>
                       <h3 className="font-semibold text-gray-800 mb-2 text-sm uppercase tracking-wide">Nutrition Prescription</h3>
                       <p className="text-sm text-gray-700 leading-relaxed">{p.prescription}</p>
                     </div>
-                    {/* Follow-up */}
                     <div className="bg-white rounded-xl p-5 border">
                       <h3 className="font-semibold text-gray-800 mb-3 text-sm uppercase tracking-wide">Follow-Up &amp; Referrals</h3>
                       <p className="text-sm text-gray-700 mb-2">{p.followUp}</p>
@@ -734,26 +831,28 @@ function DietitianDashboard({ currentUser, onLogout, dbRecipes, config }) {
                   </div>
                 );
               })()}
+
               {activeTab === 'messages' && (
                 <div className="bg-white rounded-xl p-4 border">
-                  <h3 className="font-semibold text-gray-700 mb-4">Send message to {selected.name}</h3>
-                  <div className="space-y-3 mb-4 max-h-64 overflow-y-auto">
+                  <h3 className="font-semibold text-gray-700 mb-4">Messages with {selected.name}</h3>
+                  <div className="space-y-3 mb-4 max-h-72 overflow-y-auto">
                     {selectedMessages.length === 0 && (
-                      <p className="text-sm text-gray-400 text-center py-4">No messages yet</p>
+                      <p className="text-sm text-gray-400 text-center py-4">No messages yet — send one below</p>
                     )}
                     {selectedMessages.map((m, i) => (
                       <div key={i} className={`p-3 rounded-xl text-sm ${m.from_user_id === currentUser.id ? 'bg-green-50 text-green-800 ml-8' : 'bg-gray-50 text-gray-700 mr-8'}`}>
-                        <p className="font-medium text-xs mb-1">{m.sender_name} · {new Date(m.sent_at).toLocaleDateString()}</p>
-                        {m.body}
+                        <p className="font-medium text-xs mb-1 text-gray-400">{m.sender_name} · {new Date(m.sent_at).toLocaleDateString()}</p>
+                        <p>{m.body}</p>
                       </div>
                     ))}
                   </div>
                   <textarea value={msgBody} onChange={e => setMsgBody(e.target.value)} rows={3}
-                    placeholder="Type a reminder or message..."
+                    placeholder="Type a message to this patient..."
                     className="w-full border rounded-lg p-3 text-sm focus:ring-2 focus:ring-green-500 outline-none" />
                   <button onClick={sendMessage} className="mt-2 w-full bg-green-500 text-white py-2 rounded-lg text-sm font-medium">Send message</button>
                 </div>
               )}
+
               {activeTab === 'mealplan' && (
                 <div className="bg-white rounded-xl p-4 border">
                   <h3 className="font-semibold text-gray-700 mb-4">Build meal plan for {selected.name}</h3>
@@ -792,26 +891,23 @@ function DietitianDashboard({ currentUser, onLogout, dbRecipes, config }) {
                   <button onClick={pushMealPlan} className="mt-4 w-full bg-green-500 text-white py-2 rounded-lg text-sm font-medium">Push meal plan to patient</button>
                 </div>
               )}
+
               {activeTab === 'goals' && (
                 <div className="bg-white rounded-xl p-4 border">
-                  <h3 className="font-semibold text-gray-700 mb-4">Set goal for {selected.name}</h3>
+                  <h3 className="font-semibold text-gray-700 mb-2">Set goal for {selected.name}</h3>
+                  {selected.currentGoal && (
+                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-3 text-sm text-blue-700">
+                      <p className="text-xs font-semibold text-blue-400 mb-1">Current goal</p>
+                      {selected.currentGoal}
+                    </div>
+                  )}
                   <textarea value={goal} onChange={e => setGoal(e.target.value)} rows={4}
                     placeholder="e.g. Reduce refined carbohydrates. Target HbA1c below 7.0%."
                     className="w-full border rounded-lg p-3 text-sm focus:ring-2 focus:ring-green-500 outline-none" />
-                  <button onClick={async () => {
-                    if (!selected) return;
-                    if (selected.isDemo) { notify('Goal saved!'); return; }
-                    await fetch(`${API}/api/goals/for-patient/${selected.userId}`, {
-                      method: 'POST', headers: authHeaders(),
-                      body: JSON.stringify({ dietitianNote: goal, followDietitianPlan: true })
-                    });
-                    notify('Goal saved for patient!');
-                  }} className="mt-3 w-full bg-green-500 text-white py-2 rounded-lg text-sm font-medium">Save goal</button>
+                  <button onClick={saveGoalForPatient} className="mt-3 w-full bg-green-500 text-white py-2 rounded-lg text-sm font-medium">Save goal for patient</button>
                 </div>
               )}
-              {activeTab === 'resources' && (
-                <DietitianResourcePanel />
-              )}
+
               {activeTab === 'recipes' && (
                 <div className="bg-white rounded-xl p-4 border">
                   <h3 className="font-semibold text-gray-700 mb-4">Recommend a recipe to {selected.name}</h3>
@@ -821,15 +917,16 @@ function DietitianDashboard({ currentUser, onLogout, dbRecipes, config }) {
                         <div>
                           <p className="font-medium text-sm text-gray-800">{r.name}</p>
                           <p className="text-xs text-gray-400">{r.prep_time}min · {r.calories}cal · {r.difficulty}</p>
+                          {r.condition_tags && (
+                            <div className="flex flex-wrap gap-1 mt-1">
+                              {r.condition_tags.split(',').map(tag => (
+                                <span key={tag} className="text-xs bg-orange-100 text-orange-600 px-1.5 py-0.5 rounded-full">{tag.trim()}</span>
+                              ))}
+                            </div>
+                          )}
                         </div>
-                        <button onClick={async () => {
-                          if (selected.isDemo) { notify(`${r.name} recommended!`); return; }
-                          await fetch(`${API}/api/recipes/${r.id}/recommend`, {
-                            method: 'POST', headers: authHeaders(),
-                            body: JSON.stringify({ patientId: selected.userId })
-                          });
-                          notify(`${r.name} recommended!`);
-                        }} className="text-xs bg-green-500 text-white px-3 py-1 rounded-lg">Send</button>
+                        <button onClick={() => recommendRecipe(r)}
+                          className="text-xs bg-green-500 text-white px-3 py-1 rounded-lg flex-shrink-0 ml-2">Send</button>
                       </div>
                     ))}
                   </div>
@@ -842,6 +939,7 @@ function DietitianDashboard({ currentUser, onLogout, dbRecipes, config }) {
     </div>
   );
 }
+
 
 function HouseholdDashboard({ currentUser, onLogout, config }) {
   const [activeTab, setActiveTab]             = useState('pantry');
@@ -1605,6 +1703,10 @@ function HouseholdDashboard({ currentUser, onLogout, config }) {
         </div>
       )}
 
+      {activeTab === 'messages_inbox' && (
+        <MessagesInboxTab API={API} authHeaders={authHeaders} currentUser={currentUser} />
+      )}
+
       {activeTab === 'settings' && (
         <SettingsTab
           currentUser={currentUser}
@@ -1622,6 +1724,7 @@ function HouseholdDashboard({ currentUser, onLogout, config }) {
             { tab: 'allrecipes', label: 'Browse',  icon: <><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></> },
             { tab: 'mealplan',   label: 'Planner', icon: <><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></> },
             { tab: 'stats',      label: 'Stats',   icon: <><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></> },
+            { tab: 'messages_inbox', label: 'Messages', icon: <><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></> },
             { tab: 'settings',   label: 'Settings', icon: <><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></> },
           ].map(({ tab, label, icon }) => (
             <button key={tab} onClick={() => setActiveTab(tab)}
@@ -1750,7 +1853,6 @@ function AllRecipesTab({ API, authHeaders, notify, config }) {
   const [mealType, setMealType] = useState('');
   const [dietTag, setDietTag]   = useState('');
   const [condition, setCondition] = useState('');
-
   const CONDITION_TAGS = ['diabetic', 'hypertensive', 'heart-healthy', 'low-glycaemic'];
   const [selected, setSelected] = useState(null);
   const [loading, setLoading]   = useState(true);
@@ -1866,6 +1968,48 @@ function AllRecipesTab({ API, authHeaders, notify, config }) {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+function MessagesInboxTab({ API, authHeaders, currentUser }) {
+  const [messages, setMessages] = useState([]);
+  const [loading, setLoading]   = useState(true);
+
+  useEffect(() => {
+    fetch(`${API}/api/messages`, { headers: authHeaders() })
+      .then(r => r.ok ? r.json() : [])
+      .then(data => { setMessages(data); setLoading(false); });
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  return (
+    <div>
+      <h2 className="text-base font-bold text-gray-800 mb-1">Messages</h2>
+      <p className="text-xs text-gray-400 mb-4">Messages from your dietitian</p>
+      {loading && <p className="text-center text-gray-400 py-8 text-sm">Loading...</p>}
+      {!loading && messages.length === 0 && (
+        <div className="text-center py-12 text-gray-400">
+          <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="mx-auto mb-3 opacity-40"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+          <p className="text-sm">No messages yet</p>
+          <p className="text-xs mt-1">Messages from your dietitian will appear here</p>
+        </div>
+      )}
+      {!loading && messages.map((m, i) => (
+        <div key={i} className="bg-white rounded-xl border p-4 mb-3">
+          <div className="flex justify-between items-start mb-2">
+            <div>
+              <p className="font-semibold text-sm text-gray-800">{m.sender_name || 'Your Dietitian'}</p>
+              <p className="text-xs text-gray-400">{new Date(m.sent_at).toLocaleDateString('en-TT', { weekday:'short', day:'numeric', month:'short', year:'numeric' })}</p>
+            </div>
+            <span className={`text-xs px-2 py-0.5 rounded-full ${
+              m.type === 'recipe_recommendation' ? 'bg-green-100 text-green-700' :
+              m.type === 'reminder' ? 'bg-blue-100 text-blue-700' :
+              'bg-gray-100 text-gray-500'
+            }`}>{m.type === 'recipe_recommendation' ? 'Recipe' : m.type === 'reminder' ? 'Reminder' : 'Message'}</span>
+          </div>
+          <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-line">{m.body}</p>
+        </div>
+      ))}
     </div>
   );
 }
