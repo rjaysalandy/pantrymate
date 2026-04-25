@@ -3,6 +3,12 @@ import './App.css';
 import { LogoFull } from './Logo';
 import fullLogo from './logo-horizontal-exact.svg';
 
+import PasswordSection from './components/PasswordSection';
+import FoodGroupHexagon from './components/FoodGroupHexagon';
+import PatientResourceHub from './components/PatientResourceHub';
+import DietitianResourcePanel from './components/DietitianResourcePanel';
+import PortionScaler from './components/PortionScaler';
+
 const API = process.env.REACT_APP_API_URL || 'http://localhost:8080';
 
 function expiryBadge(item) {
@@ -45,6 +51,7 @@ function AuthScreen({ onLogin }) {
   const [role, setRole]       = useState('user');
   const [error, setError]     = useState('');
   const [loading, setLoading] = useState(false);
+  const [pwValid, setPwValid] = useState(false);
 
   const submit = async () => {
     setError(''); setLoading(true);
@@ -118,17 +125,23 @@ return (
             className="mt-1 w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 outline-none"
             placeholder="you@example.com" />
         </div>
-        <div className="mb-6">
-          <label className="text-sm font-medium text-gray-700">Password</label>
-          <input type="password" value={pass} onChange={e => setPass(e.target.value)}
-            onKeyDown={e => e.key === 'Enter' && submit()}
-            className="mt-1 w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 outline-none"
-            placeholder="••••••••" />
-        </div>
+        {mode === 'login' ? (
+          <div className="mb-6">
+            <label className="text-sm font-medium text-gray-700">Password</label>
+            <input type="password" value={pass} onChange={e => setPass(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && submit()}
+              className="mt-1 w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 outline-none"
+              placeholder="••••••••" />
+          </div>
+        ) : (
+          <div className="mb-6">
+            <PasswordSection onChange={(pwd, valid) => { setPass(pwd); setPwValid(valid); }} />
+          </div>
+        )}
 
         {error && <p className="text-red-500 text-sm mb-4 bg-red-50 p-3 rounded-lg">{error}</p>}
 
-        <button onClick={submit} disabled={loading}
+        <button onClick={submit} disabled={loading || (mode === 'register' && !pwValid)}
           className="w-full bg-green-500 hover:bg-green-600 text-white py-3 rounded-xl font-semibold transition-all disabled:opacity-50">
           {loading ? 'Please wait…' : mode === 'login' ? 'Sign In' : `Create ${role === 'dietician' ? 'Dietitian' : 'Household'} Account`}
         </button>
@@ -564,7 +577,7 @@ function DietitianDashboard({ currentUser, onLogout, dbRecipes, config }) {
                 )}
               </div>
               <div className="flex gap-2 mb-5 overflow-x-auto pb-1">
-                {['overview','profile','messages','mealplan','goals','recipes'].map(t => (
+                {['overview','profile','messages','mealplan','goals','recipes','resources'].map(t => (
                   <button key={t} onClick={() => setActiveTab(t)}
                     className={`flex-shrink-0 px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${activeTab === t ? 'bg-green-500 text-white' : 'bg-white border text-gray-600 hover:bg-gray-50'}`}>
                     {t.charAt(0).toUpperCase() + t.slice(1)}
@@ -783,10 +796,21 @@ function DietitianDashboard({ currentUser, onLogout, dbRecipes, config }) {
                 <div className="bg-white rounded-xl p-4 border">
                   <h3 className="font-semibold text-gray-700 mb-4">Set goal for {selected.name}</h3>
                   <textarea value={goal} onChange={e => setGoal(e.target.value)} rows={4}
-                    placeholder="e.g. Reduce waste to under 2 items per week."
+                    placeholder="e.g. Reduce refined carbohydrates. Target HbA1c below 7.0%."
                     className="w-full border rounded-lg p-3 text-sm focus:ring-2 focus:ring-green-500 outline-none" />
-                  <button onClick={saveRecord} className="mt-3 w-full bg-green-500 text-white py-2 rounded-lg text-sm font-medium">Save goal</button>
+                  <button onClick={async () => {
+                    if (!selected) return;
+                    if (selected.isDemo) { notify('Goal saved!'); return; }
+                    await fetch(`${API}/api/goals/for-patient/${selected.userId}`, {
+                      method: 'POST', headers: authHeaders(),
+                      body: JSON.stringify({ dietitianNote: goal, followDietitianPlan: true })
+                    });
+                    notify('Goal saved for patient!');
+                  }} className="mt-3 w-full bg-green-500 text-white py-2 rounded-lg text-sm font-medium">Save goal</button>
                 </div>
+              )}
+              {activeTab === 'resources' && (
+                <DietitianResourcePanel />
               )}
               {activeTab === 'recipes' && (
                 <div className="bg-white rounded-xl p-4 border">
@@ -800,9 +824,9 @@ function DietitianDashboard({ currentUser, onLogout, dbRecipes, config }) {
                         </div>
                         <button onClick={async () => {
                           if (selected.isDemo) { notify(`${r.name} recommended!`); return; }
-                          await fetch(`${API}/api/messages`, {
+                          await fetch(`${API}/api/recipes/${r.id}/recommend`, {
                             method: 'POST', headers: authHeaders(),
-                            body: JSON.stringify({ toUserId: selected.userId, body: `I recommend trying: ${r.name}. ${r.instructions?.slice(0,100)}...`, type: 'recipe' })
+                            body: JSON.stringify({ patientId: selected.userId })
                           });
                           notify(`${r.name} recommended!`);
                         }} className="text-xs bg-green-500 text-white px-3 py-1 rounded-lg">Send</button>
@@ -855,6 +879,8 @@ function HouseholdDashboard({ currentUser, onLogout, config }) {
   const [leftoverItem, setLeftoverItem]       = useState('');
   const [showPdfOptions, setShowPdfOptions]   = useState(false);
   const [dismissedRecs, setDismissedRecs]     = useState([]);
+  const [showResources, setShowResources]     = useState(false);
+  const [foodCoverage, setFoodCoverage]       = useState({ coverage: {}, total_groups: 0 });
 
   const DAYS       = config.days;
   const SLOTS      = config.mealSlots;
@@ -867,12 +893,14 @@ function HouseholdDashboard({ currentUser, onLogout, config }) {
     setTimeout(() => setNotification(''), 3000);
   }, []);
 
+  const fetchFoodCoverage = async () => { const r = await fetch(`${API}/api/food-groups/coverage`, { headers: authHeaders() }); if (r.ok) setFoodCoverage(await r.json()); };
+
   const fetchAll = async () => {
     await Promise.all([
       fetchPantry(), fetchWaste(), fetchRecipes(), fetchLeftovers(),
       fetchGoals(), fetchMealPlan(), fetchRewards(), fetchRecommendations(),
       fetchSharingStatus(), fetchNotifications(), fetchAiInsight(),
-      fetchUnits(), fetchCategories()
+      fetchUnits(), fetchCategories(), fetchFoodCoverage()
     ]);
   };
   useEffect(() => { fetchAll(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
@@ -1047,6 +1075,7 @@ function HouseholdDashboard({ currentUser, onLogout, config }) {
         </div>
         <div className="flex items-center gap-2">
           {unreadCount > 0 && <span className="bg-red-500 text-white text-xs w-5 h-5 rounded-full flex items-center justify-center">{unreadCount}</span>}
+          <button onClick={() => setShowResources(true)} className="text-xs bg-green-50 text-green-600 px-3 py-1.5 rounded-lg border border-green-200">Resources</button>
           <button onClick={() => setShowPdfOptions(true)} className="text-xs bg-blue-50 text-blue-600 px-3 py-1.5 rounded-lg border border-blue-200">Share PDF</button>
           <button onClick={onLogout} className="text-xs text-gray-400 hover:text-red-500 px-2 py-1.5 border rounded-lg">Out</button>
         </div>
@@ -1276,6 +1305,9 @@ function HouseholdDashboard({ currentUser, onLogout, config }) {
               <div className="bg-green-50 rounded-2xl p-3 text-center"><p className="text-2xl font-bold text-green-600">{stats.used}</p><p className="text-xs text-green-600">Used</p></div>
               <div className="bg-red-50 rounded-2xl p-3 text-center"><p className="text-2xl font-bold text-red-500">{stats.wasted}</p><p className="text-xs text-red-500">Wasted</p></div>
               <div className="bg-blue-50 rounded-2xl p-3 text-center"><p className="text-2xl font-bold text-blue-600">{stats.saveRate}%</p><p className="text-xs text-blue-600">Save rate</p></div>
+            </div>
+            <div className="mb-4 flex justify-center">
+              <FoodGroupHexagon coverage={foodCoverage.coverage} totalGroups={foodCoverage.total_groups} />
             </div>
             {stats.saveRate >= 80 && <div className="bg-green-50 border border-green-200 rounded-xl p-3 mb-4 text-sm text-green-700">Excellent — you are using most of what you buy!</div>}
             {stats.saveRate >= 50 && stats.saveRate < 80 && <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-3 mb-4 text-sm text-yellow-700">Good progress — keep reducing waste!</div>}
@@ -1526,17 +1558,12 @@ function HouseholdDashboard({ currentUser, onLogout, config }) {
               </div>
             )}
             <div className="mb-4">
-              <h4 className="text-sm font-semibold text-gray-700 mb-2">Ingredients</h4>
-              {selectedRecipe.ingredients?.length > 0 ? selectedRecipe.ingredients.map((ing, i) => {
-                const isMissing = selectedRecipe.missingItems?.some(m => ing.ingredient_name?.toLowerCase().includes(m.toLowerCase()) || m.toLowerCase().includes(ing.ingredient_name?.toLowerCase()));
-                return (
-                  <span key={i} className={`inline-block text-sm px-2 py-0.5 rounded-full mr-1 mb-1 ${isMissing ? 'bg-red-100 text-red-700' : 'bg-green-50 text-green-700'}`}>
-                    {ing.quantity > 0 ? `${parseFloat(ing.quantity).toFixed(2)} ${ing.unit || ''} ${ing.ingredient_name}`.trim() : ing.ingredient_name}
-                  </span>
-                );
-              }) : selectedRecipe.ingredients_text?.split(',').map((ing, i) => (
-                <span key={i} className="inline-block text-sm px-2 py-0.5 rounded-full mr-1 mb-1 bg-green-50 text-green-700">{ing.trim()}</span>
-              ))}
+              {selectedRecipe.ingredients?.length > 0
+                ? <PortionScaler recipe={selectedRecipe} ingredients={selectedRecipe.ingredients} />
+                : selectedRecipe.ingredients_text?.split(',').map((ing, i) => (
+                    <span key={i} className="inline-block text-sm px-2 py-0.5 rounded-full mr-1 mb-1 bg-green-50 text-green-700">{ing.trim()}</span>
+                  ))
+              }
             </div>
             <div className="mb-6">
               <h4 className="text-sm font-semibold text-gray-700 mb-2">Instructions</h4>
@@ -1569,6 +1596,12 @@ function HouseholdDashboard({ currentUser, onLogout, config }) {
               <button onClick={() => { setShowPdfOptions(false); window.print(); }} className="flex-1 bg-blue-500 text-white rounded-xl py-2.5 text-sm font-medium">Print / Save PDF</button>
             </div>
           </div>
+        </div>
+      )}
+
+      {showResources && (
+        <div className="fixed inset-0 z-50 bg-white overflow-y-auto">
+          <PatientResourceHub onBack={() => setShowResources(false)} />
         </div>
       )}
 
@@ -1716,6 +1749,9 @@ function AllRecipesTab({ API, authHeaders, notify, config }) {
   const [search, setSearch]     = useState('');
   const [mealType, setMealType] = useState('');
   const [dietTag, setDietTag]   = useState('');
+  const [condition, setCondition] = useState('');
+
+  const CONDITION_TAGS = ['diabetic', 'hypertensive', 'heart-healthy', 'low-glycaemic'];
   const [selected, setSelected] = useState(null);
   const [loading, setLoading]   = useState(true);
 
@@ -1726,9 +1762,10 @@ function AllRecipesTab({ API, authHeaders, notify, config }) {
   const fetchAll = async () => {
     setLoading(true);
     const params = new URLSearchParams();
-    if (search)   params.append('search', search);
-    if (mealType) params.append('mealType', mealType);
-    if (dietTag)  params.append('dietary', dietTag);
+    if (search)    params.append('search', search);
+    if (mealType)  params.append('mealType', mealType);
+    if (dietTag)   params.append('dietary', dietTag);
+    if (condition) params.append('condition', condition);
     const r = await fetch(`${API}/api/recipes?${params}`, { headers: authHeaders() });
     if (r.ok) setRecipes(await r.json());
     setLoading(false);
@@ -1736,7 +1773,7 @@ function AllRecipesTab({ API, authHeaders, notify, config }) {
 
   fetchAll();
 // eslint-disable-next-line react-hooks/exhaustive-deps
-}, [search, mealType, dietTag]);
+}, [search, mealType, dietTag, condition]);
 
   return (
     <div>
@@ -1750,10 +1787,16 @@ function AllRecipesTab({ API, authHeaders, notify, config }) {
           <button key={t} onClick={() => setMealType(t)} className={`text-xs px-3 py-1 rounded-full border ${mealType === t ? 'bg-blue-500 text-white border-blue-500' : 'text-gray-500 border-gray-200'}`}>{t}</button>
         ))}
       </div>
-      <div className="flex flex-wrap gap-2 mb-4">
+      <div className="flex flex-wrap gap-2 mb-2">
         <button onClick={() => setDietTag('')} className={`text-xs px-3 py-1 rounded-full border ${dietTag === '' ? 'bg-green-500 text-white border-green-500' : 'text-gray-500 border-gray-200'}`}>All diets</button>
         {DIET_TAGS.map(tag => (
           <button key={tag} onClick={() => setDietTag(dietTag === tag ? '' : tag)} className={`text-xs px-3 py-1 rounded-full border ${dietTag === tag ? 'bg-green-500 text-white border-green-500' : 'text-gray-500 border-gray-200'}`}>{tag}</button>
+        ))}
+      </div>
+      <div className="flex flex-wrap gap-2 mb-4">
+        <button onClick={() => setCondition('')} className={`text-xs px-3 py-1 rounded-full border ${condition === '' ? 'bg-orange-500 text-white border-orange-500' : 'text-gray-500 border-gray-200'}`}>All conditions</button>
+        {CONDITION_TAGS.map(tag => (
+          <button key={tag} onClick={() => setCondition(condition === tag ? '' : tag)} className={`text-xs px-3 py-1 rounded-full border ${condition === tag ? 'bg-orange-500 text-white border-orange-500' : 'text-gray-500 border-gray-200'}`}>{tag}</button>
         ))}
       </div>
       {loading && <p className="text-center text-gray-400 py-8">Loading recipes...</p>}
