@@ -419,28 +419,42 @@ function DietitianDashboard({ currentUser, onLogout, dbRecipes, config }) {
   const [patients, setPatients]           = useState([]);
   const [selected, setSelected]           = useState(null);
   const [activeTab, setActiveTab]         = useState('overview');
+  const [mainView, setMainView]           = useState('patients');
   const [msgBody, setMsgBody]             = useState('');
+  const [msgPatient, setMsgPatient]       = useState(null);
+  const [msgView, setMsgView]             = useState('inbox');
+  const [sentMessages, setSentMessages]   = useState([]);
   const [clinicalNotes, setClinicalNotes] = useState('');
   const [goal, setGoal]                   = useState('');
   const [mealPlan, setMealPlan]           = useState({});
   const [notification, setNotification]   = useState('');
-  const [demoMessages, setDemoMessages]   = useState({ 'demo-1': [], 'demo-2': [], 'demo-3': [], 'demo-4': [], 'demo-5': [] });
+  const [onboardForm, setOnboardForm]     = useState({
+    dob: '', phone: '', diagnosis: '', allergies: '',
+    currentGoal: '', nextAppointment: '', clinicalNotes: ''
+  });
+  const [demoMessages, setDemoMessages] = useState({
+    'demo-1': [], 'demo-2': [], 'demo-3': [], 'demo-4': [], 'demo-5': []
+  });
 
   const DAYS  = config.days;
   const SLOTS = config.mealSlots;
+  const recipes = dbRecipes || [];
 
-  useEffect(() => { fetchPatients(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { fetchPatients(); fetchSentMessages(); }, []); // eslint-disable-line
 
   const fetchPatients = async () => {
     const res = await fetch(`${API}/api/sharing/patients`, { headers: authHeaders() });
-    const data = await res.json();
-    // Merge real patients with demo patients — demo patients always appear first
-    const real = res.ok ? data : [];
+    const real = res.ok ? await res.json() : [];
     const all  = [...DEMO_PATIENTS, ...real];
     setPatients(all);
     setSelected(all[0]);
-    setClinicalNotes(all[0]?.currentGoal ? '' : '');
     setGoal(all[0]?.currentGoal || '');
+    setMsgPatient(all[0]);
+  };
+
+  const fetchSentMessages = async () => {
+    const res = await fetch(`${API}/api/messages/sent`, { headers: authHeaders() });
+    if (res.ok) setSentMessages(await res.json());
   };
 
   const selectPatient = (p) => {
@@ -450,52 +464,69 @@ function DietitianDashboard({ currentUser, onLogout, dbRecipes, config }) {
     setGoal(p.currentGoal || '');
     setMealPlan({});
     setMsgBody('');
+    setOnboardForm({ dob:'', phone:'', diagnosis:'', allergies:'', currentGoal:'', nextAppointment:'', clinicalNotes:'' });
+    setMainView('patients');
   };
 
   const notify = (msg) => { setNotification(msg); setTimeout(() => setNotification(''), 3000); };
 
-  const sendMessage = async () => {
-    if (!msgBody.trim() || !selected) return;
-    if (selected.isDemo) {
-      // For demo patients, store message locally in state
+  const sendMessage = async (targetPatient) => {
+    const patient = targetPatient || selected;
+    if (!msgBody.trim() || !patient) return;
+    if (patient.isDemo) {
       setDemoMessages(prev => ({
         ...prev,
-        [selected.userId]: [...(prev[selected.userId] || []), {
-          from_user_id: currentUser.id,
-          sender_name:  currentUser.name,
-          body:         msgBody,
-          sent_at:      new Date().toISOString(),
-          type:         'reminder'
+        [patient.userId]: [...(prev[patient.userId] || []), {
+          from_user_id: currentUser.id, sender_name: currentUser.name,
+          body: msgBody, sent_at: new Date().toISOString(), type: 'reminder'
         }]
       }));
-      setMsgBody(''); notify('Message sent!');
-      return;
+      setMsgBody(''); notify('Message sent!'); return;
     }
-    await fetch(`${API}/api/messages`, {
+    const res = await fetch(`${API}/api/messages`, {
       method: 'POST', headers: authHeaders(),
-      body: JSON.stringify({ toUserId: selected.userId, body: msgBody, type: 'reminder' })
+      body: JSON.stringify({ toUserId: patient.userId, body: msgBody, type: 'reminder' })
     });
-    setMsgBody(''); notify('Message sent!');
+    if (res.ok) { setMsgBody(''); notify('Message sent!'); fetchSentMessages(); }
   };
 
-  const saveRecord = async () => {
+  const saveGoalForPatient = async () => {
     if (!selected) return;
-    if (selected.isDemo) { notify('Record saved!'); return; }
+    if (selected.isDemo) { notify('Goal saved!'); return; }
+    await fetch(`${API}/api/goals/for-patient/${selected.userId}`, {
+      method: 'POST', headers: authHeaders(),
+      body: JSON.stringify({ dietitianNote: goal, followDietitianPlan: true })
+    });
+    notify('Goal saved for patient!');
+  };
+
+  const saveOnboarding = async () => {
+    if (!selected || selected.isDemo) { notify('Cannot edit demo patient records.'); return; }
     await fetch(`${API}/api/sharing/patient-record`, {
       method: 'POST', headers: authHeaders(),
-      body: JSON.stringify({ userId: selected.userId, currentGoal: goal, clinicalNotes })
+      body: JSON.stringify({ userId: selected.userId, ...onboardForm })
     });
-    notify('Record saved!');
+    notify('Patient record saved!');
   };
 
   const pushMealPlan = async () => {
     if (!selected) return;
-    if (selected.isDemo) { notify('Meal plan pushed to patient!'); return; }
+    if (selected.isDemo) { notify('Meal plan pushed!'); return; }
     await fetch(`${API}/api/mealplanner/push`, {
       method: 'POST', headers: authHeaders(),
       body: JSON.stringify({ patientId: selected.userId, planData: mealPlan })
     });
     notify('Meal plan pushed to patient!');
+  };
+
+  const recommendRecipe = async (r) => {
+    if (!selected) return;
+    if (selected.isDemo) { notify(`${r.name} recommended!`); return; }
+    await fetch(`${API}/api/recipes/${r.id}/recommend`, {
+      method: 'POST', headers: authHeaders(),
+      body: JSON.stringify({ patientId: selected.userId })
+    });
+    notify(`${r.name} recommended!`);
   };
 
   const saveRate = (p) => {
@@ -505,91 +536,170 @@ function DietitianDashboard({ currentUser, onLogout, dbRecipes, config }) {
     return total > 0 ? Math.round((used / total) * 100) : 0;
   };
 
-  const recipes = dbRecipes || [];
-
-  // For demo patients, pull messages from local state
-  const selectedMessages = selected?.isDemo
-    ? demoMessages[selected.userId] || []
-    : selected?.messages || [];
+  const patientMessages = (p) => p?.isDemo ? (demoMessages[p.userId] || []) : (p?.messages || []);
+  const allInboxMessages = patients.flatMap(p =>
+    patientMessages(p).map(m => ({ ...m, patientName: p.name }))
+  ).sort((a, b) => new Date(b.sent_at) - new Date(a.sent_at));
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gray-50 flex flex-col">
       {notification && (
         <div className="fixed top-4 right-4 bg-green-500 text-white px-6 py-3 rounded-xl shadow-lg z-50">{notification}</div>
       )}
-      <div className="bg-white border-b px-6 py-4 flex justify-between items-center">
+
+      {/* Top bar */}
+      <div className="bg-white border-b px-6 py-4 flex justify-between items-center flex-shrink-0">
         <div>
           <h1 className="text-lg font-bold text-gray-800">Dietitian Portal</h1>
           <p className="text-sm text-gray-500">Welcome, {currentUser.name}</p>
         </div>
-        <button onClick={onLogout} className="text-sm text-gray-500 hover:text-red-500 px-4 py-2 border rounded-lg">Sign out</button>
+        <div className="flex items-center gap-2">
+          <button onClick={() => setMainView('messages')} className="text-xs bg-blue-50 text-blue-600 px-3 py-1.5 rounded-lg border border-blue-200">Messages</button>
+          <button onClick={() => setMainView('resources')} className="text-xs bg-green-50 text-green-600 px-3 py-1.5 rounded-lg border border-green-200">Resources</button>
+          <button onClick={onLogout} className="text-sm text-gray-500 hover:text-red-500 px-4 py-2 border rounded-lg">Sign out</button>
+        </div>
       </div>
-      <div className="flex h-screen">
-        {/* Patient list — always visible on md+, hidden on mobile when a patient is selected */}
-        <div className={`${
-          selected ? 'hidden md:flex' : 'flex'
-        } flex-col w-full md:w-64 bg-white border-r p-4 overflow-y-auto`}>
+
+      {/* Summary strip */}
+      <div className="bg-white border-b px-6 py-3 flex gap-6 flex-shrink-0 overflow-x-auto">
+        {[
+          { label: 'Patients', val: patients.length, color: 'text-gray-800' },
+          { label: 'High waste', val: patients.filter(p => saveRate(p) < 50).length, color: 'text-red-500' },
+          { label: 'On track', val: patients.filter(p => saveRate(p) >= 80).length, color: 'text-green-500' },
+          { label: 'Msgs sent', val: sentMessages.length, color: 'text-blue-500' },
+        ].map(({ label, val, color }) => (
+          <div key={label} className="text-center flex-shrink-0">
+            <p className={`text-xl font-bold ${color}`}>{val}</p>
+            <p className="text-xs text-gray-400">{label}</p>
+          </div>
+        ))}
+      </div>
+
+      {/* Resources overlay */}
+      {mainView === 'resources' && (
+        <div className="fixed inset-0 z-50 bg-white overflow-y-auto">
+          <div className="p-4 max-w-2xl mx-auto">
+            <button onClick={() => setMainView('patients')} className="text-sm text-blue-600 font-semibold mb-4 block">← Back</button>
+            <DietitianResourcePanel />
+          </div>
+        </div>
+      )}
+
+      {/* Message centre overlay */}
+      {mainView === 'messages' && (
+        <div className="fixed inset-0 z-50 bg-gray-50 overflow-y-auto">
+          <div className="max-w-2xl mx-auto p-4">
+            <button onClick={() => setMainView('patients')} className="text-sm text-blue-600 font-semibold mb-4 block">← Back</button>
+            <h2 className="text-lg font-bold text-gray-800 mb-4">Message Centre</h2>
+            <div className="flex bg-gray-100 rounded-xl p-1 mb-4">
+              {['inbox','sent'].map(v => (
+                <button key={v} onClick={() => setMsgView(v)}
+                  className={`flex-1 py-2 rounded-lg text-sm font-medium transition-all ${msgView === v ? 'bg-white shadow text-blue-600' : 'text-gray-500'}`}>
+                  {v.charAt(0).toUpperCase() + v.slice(1)}
+                </button>
+              ))}
+            </div>
+            {msgView === 'inbox' && (
+              <div className="space-y-3 mb-6">
+                {allInboxMessages.length === 0 && <p className="text-sm text-gray-400 text-center py-8">No messages received yet</p>}
+                {allInboxMessages.map((m, i) => (
+                  <div key={i} className="bg-white rounded-xl border p-4">
+                    <div className="flex justify-between mb-1">
+                      <p className="font-semibold text-sm text-gray-800">{m.patientName}</p>
+                      <p className="text-xs text-gray-400">{new Date(m.sent_at).toLocaleDateString()}</p>
+                    </div>
+                    <p className="text-sm text-gray-700">{m.body}</p>
+                  </div>
+                ))}
+              </div>
+            )}
+            {msgView === 'sent' && (
+              <div className="space-y-3 mb-6">
+                {sentMessages.length === 0 && <p className="text-sm text-gray-400 text-center py-8">No messages sent yet</p>}
+                {sentMessages.map((m, i) => (
+                  <div key={i} className="bg-blue-50 rounded-xl border border-blue-100 p-4">
+                    <div className="flex justify-between mb-1">
+                      <p className="font-semibold text-sm text-gray-800">To: {m.recipient_name}</p>
+                      <p className="text-xs text-gray-400">{new Date(m.sent_at).toLocaleDateString()}</p>
+                    </div>
+                    <p className="text-sm text-gray-700">{m.body}</p>
+                  </div>
+                ))}
+              </div>
+            )}
+            <div className="bg-white rounded-xl border p-4">
+              <h3 className="font-semibold text-gray-700 mb-3 text-sm">New message</h3>
+              <select value={msgPatient?.userId || ''} onChange={e => setMsgPatient(patients.find(p => String(p.userId) === e.target.value) || null)}
+                className="w-full border rounded-lg p-2 text-sm mb-3 focus:ring-2 focus:ring-blue-400 outline-none">
+                <option value="">Select patient...</option>
+                {patients.map(p => <option key={p.userId} value={p.userId}>{p.name}</option>)}
+              </select>
+              <textarea value={msgBody} onChange={e => setMsgBody(e.target.value)} rows={3}
+                placeholder="Type your message..."
+                className="w-full border rounded-lg p-2 text-sm focus:ring-2 focus:ring-blue-400 outline-none mb-2" />
+              <button onClick={() => sendMessage(msgPatient)} disabled={!msgBody.trim() || !msgPatient}
+                className="w-full bg-blue-500 text-white py-2 rounded-lg text-sm font-medium disabled:opacity-40">Send message</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div className="flex flex-1 overflow-hidden">
+        {/* Patient list */}
+        <div className={`${selected ? 'hidden md:flex' : 'flex'} flex-col w-full md:w-64 bg-white border-r p-4 overflow-y-auto`}>
           <p className="text-xs font-semibold text-gray-400 uppercase mb-3">Patients ({patients.length})</p>
-          {patients.length === 0 && <p className="text-sm text-gray-400">No patients sharing data yet</p>}
           {patients.map(p => (
             <button key={p.userId} onClick={() => selectPatient(p)}
               className={`w-full text-left p-3 rounded-xl mb-2 transition-all ${selected?.userId === p.userId ? 'bg-green-50 border border-green-200' : 'hover:bg-gray-50'}`}>
               <div className="flex items-center gap-2 mb-0.5">
                 <p className="font-medium text-sm text-gray-800">{p.name}</p>
-                {p.isDemo && (
-                  <span className="text-xs font-medium text-gray-400 border border-gray-200 rounded px-1.5 py-0.5 leading-none tracking-wide">Demo</span>
-                )}
+                {p.isDemo && <span className="text-xs text-gray-400 border border-gray-200 rounded px-1.5 py-0.5 leading-none">Demo</span>}
               </div>
-              <p className="text-xs text-gray-400">{p.items?.length || 0} pantry items · {saveRate(p)}% save rate</p>
+              <p className="text-xs text-gray-400">{p.items?.length || 0} items · {saveRate(p)}% save</p>
             </button>
           ))}
         </div>
-        {/* Detail panel — full screen on mobile, flex-1 on md+ */}
-        <div className={`${
-          selected ? 'flex' : 'hidden md:flex'
-        } flex-col flex-1 overflow-y-auto`}>
+
+        {/* Patient detail */}
+        <div className={`${selected ? 'flex' : 'hidden md:flex'} flex-col flex-1 overflow-y-auto`}>
           {!selected ? (
-            <div className="flex items-center justify-center h-full text-gray-400"><p>Select a patient to view their data</p></div>
+            <div className="flex items-center justify-center h-full text-gray-400"><p>Select a patient</p></div>
           ) : (
             <div className="p-4 md:p-6">
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center gap-3">
-                  {/* Back button — mobile only */}
-                  <button
-                    onClick={() => setSelected(null)}
-                    className="md:hidden flex items-center justify-center w-8 h-8 rounded-full bg-gray-100 text-gray-600"
-                  >
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+                  <button onClick={() => setSelected(null)} className="md:hidden w-8 h-8 rounded-full bg-gray-100 text-gray-600 flex items-center justify-center">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="15 18 9 12 15 6"/></svg>
                   </button>
                   <div>
-                    <div className="flex items-center gap-2 flex-wrap">
+                    <div className="flex items-center gap-2">
                       <h2 className="text-lg font-bold text-gray-800">{selected.name}</h2>
-                      {selected.isDemo && (
-                        <span className="text-xs font-medium text-gray-400 border border-gray-200 rounded px-2 py-0.5 tracking-wide">Demo patient</span>
-                      )}
+                      {selected.isDemo && <span className="text-xs text-gray-400 border border-gray-200 rounded px-2 py-0.5">Demo</span>}
                     </div>
                     <p className="text-sm text-gray-500">{selected.email}</p>
                   </div>
                 </div>
                 {saveRate(selected) < 50 && (
-                  <div className="bg-amber-50 border border-amber-200 text-amber-700 px-3 py-1.5 rounded-xl text-xs">
-                    High waste — {100 - saveRate(selected)}% wasted
-                  </div>
+                  <span className="bg-amber-50 border border-amber-200 text-amber-700 px-3 py-1.5 rounded-xl text-xs">High waste</span>
                 )}
               </div>
+
+              {/* Tabs */}
               <div className="flex gap-2 mb-5 overflow-x-auto pb-1">
-                {['overview','profile','messages','mealplan','goals','recipes'].map(t => (
+                {['overview','profile','onboarding','messages','mealplan','goals','recipes'].map(t => (
                   <button key={t} onClick={() => setActiveTab(t)}
                     className={`flex-shrink-0 px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${activeTab === t ? 'bg-green-500 text-white' : 'bg-white border text-gray-600 hover:bg-gray-50'}`}>
                     {t.charAt(0).toUpperCase() + t.slice(1)}
                   </button>
                 ))}
               </div>
+
+              {/* OVERVIEW */}
               {activeTab === 'overview' && (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="bg-white rounded-xl p-4 border">
                     <h3 className="font-semibold text-gray-700 mb-3">Pantry ({selected.items?.length || 0} items)</h3>
-                    {selected.items?.slice(0, 8).map((item, i) => {
+                    {(selected.items || []).slice(0, 8).map((item, i) => {
                       const badge = expiryBadge(item);
                       return (
                         <div key={i} className="flex justify-between items-center py-2 border-b last:border-0">
@@ -615,25 +725,38 @@ function DietitianDashboard({ currentUser, onLogout, dbRecipes, config }) {
                         <p className="text-xs text-blue-600">Save rate</p>
                       </div>
                     </div>
-                    <h3 className="font-semibold text-gray-700 mb-2">Clinical notes</h3>
+                    <label className="text-xs text-gray-500 font-medium">Clinical notes</label>
                     <textarea value={clinicalNotes} onChange={e => setClinicalNotes(e.target.value)} rows={3}
                       placeholder="Add clinical notes..."
-                      className="w-full border rounded-lg p-2 text-sm focus:ring-2 focus:ring-green-500 outline-none" />
-                    <button onClick={saveRecord} className="mt-2 w-full bg-green-500 text-white py-2 rounded-lg text-sm font-medium">Save notes</button>
+                      className="mt-1 w-full border rounded-lg p-2 text-sm focus:ring-2 focus:ring-green-500 outline-none" />
+                    <button onClick={async () => {
+                      if (selected.isDemo) { notify('Notes saved!'); return; }
+                      await fetch(`${API}/api/sharing/patient-record`, {
+                        method: 'POST', headers: authHeaders(),
+                        body: JSON.stringify({ userId: selected.userId, clinicalNotes })
+                      });
+                      notify('Notes saved!');
+                    }} className="mt-2 w-full bg-green-500 text-white py-2 rounded-lg text-sm font-medium">Save notes</button>
                   </div>
                 </div>
               )}
+
+              {/* PROFILE — read-only clinical record */}
               {activeTab === 'profile' && (() => {
                 const p = selected?.profile;
-                if (!p) return <div className="bg-white rounded-xl p-6 border"><p className="text-sm text-gray-400">No profile data available for this patient.</p></div>;
+                if (!p) return (
+                  <div className="bg-white rounded-xl p-6 border text-center">
+                    <p className="text-sm text-gray-500 mb-3">No clinical profile on file.</p>
+                    <button onClick={() => setActiveTab('onboarding')} className="bg-green-500 text-white px-4 py-2 rounded-lg text-sm font-medium">Add patient record →</button>
+                  </div>
+                );
                 const flagColor = f => f === 'High' ? 'text-red-600 bg-red-50' : f === 'Low' ? 'text-amber-600 bg-amber-50' : 'text-green-700 bg-green-50';
                 return (
                   <div className="space-y-4">
-                    {/* Demographics */}
                     <div className="bg-white rounded-xl p-5 border">
-                      <h3 className="font-semibold text-gray-800 mb-3 text-sm uppercase tracking-wide">Demographics &amp; Referral</h3>
+                      <h3 className="font-semibold text-gray-800 mb-3 text-xs uppercase tracking-wide text-gray-400">Demographics &amp; Referral</h3>
                       <div className="grid grid-cols-2 md:grid-cols-3 gap-3 text-sm">
-                        {[['MRN', p.mrn], ['Date of Birth', p.dob], ['Gender', p.gender], ['Phone', p.phone], ['Address', p.address], ['Consent Date', p.consentDate]].map(([k, v]) => (
+                        {[['MRN',p.mrn],['DOB',p.dob],['Gender',p.gender],['Phone',p.phone],['Address',p.address],['Consent',p.consentDate]].map(([k,v])=>(
                           <div key={k}><p className="text-xs text-gray-400">{k}</p><p className="font-medium text-gray-700">{v}</p></div>
                         ))}
                       </div>
@@ -642,184 +765,209 @@ function DietitianDashboard({ currentUser, onLogout, dbRecipes, config }) {
                         <p className="text-sm text-gray-700">{p.referralReason}</p>
                       </div>
                     </div>
-                    {/* Diagnoses & Medications */}
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div className="bg-white rounded-xl p-5 border">
-                        <h3 className="font-semibold text-gray-800 mb-3 text-sm uppercase tracking-wide">Diagnoses</h3>
-                        {p.diagnoses.map((d, i) => <p key={i} className="text-sm text-gray-700 py-1 border-b last:border-0">{d}</p>)}
-                        <div className="mt-3 pt-3 border-t">
-                          <p className="text-xs text-gray-400 mb-1">Allergies / Intolerances</p>
-                          <p className="text-sm text-gray-700">{p.allergies}</p>
-                        </div>
+                        <h3 className="text-xs uppercase tracking-wide text-gray-400 mb-3">Diagnoses</h3>
+                        {p.diagnoses?.map((d,i)=><p key={i} className="text-sm text-gray-700 py-1 border-b last:border-0">{d}</p>)}
+                        <p className="text-xs text-gray-400 mt-3 mb-1">Allergies</p>
+                        <p className="text-sm text-gray-700">{p.allergies}</p>
                       </div>
                       <div className="bg-white rounded-xl p-5 border">
-                        <h3 className="font-semibold text-gray-800 mb-3 text-sm uppercase tracking-wide">Medications</h3>
-                        {p.medications.map((m, i) => <p key={i} className="text-sm text-gray-700 py-1 border-b last:border-0">{m}</p>)}
+                        <h3 className="text-xs uppercase tracking-wide text-gray-400 mb-3">Medications</h3>
+                        {p.medications?.map((m,i)=><p key={i} className="text-sm text-gray-700 py-1 border-b last:border-0">{m}</p>)}
                       </div>
                     </div>
-                    {/* Anthropometrics */}
                     <div className="bg-white rounded-xl p-5 border">
-                      <h3 className="font-semibold text-gray-800 mb-3 text-sm uppercase tracking-wide">Anthropometrics</h3>
-                      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
-                        {[['Height', p.anthropometrics.height], ['Weight', p.anthropometrics.weight], ['BMI', p.anthropometrics.bmi], ['Goal Weight', p.anthropometrics.goalWeight]].map(([k, v]) => (
+                      <h3 className="text-xs uppercase tracking-wide text-gray-400 mb-3">Anthropometrics</h3>
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                        {[['Height',p.anthropometrics?.height],['Weight',p.anthropometrics?.weight],['BMI',p.anthropometrics?.bmi],['Goal Wt',p.anthropometrics?.goalWeight]].map(([k,v])=>(
                           <div key={k} className="bg-gray-50 rounded-lg p-3 text-center">
                             <p className="text-xs text-gray-400 mb-1">{k}</p>
-                            <p className="font-bold text-gray-800">{v}</p>
+                            <p className="font-bold text-gray-800 text-sm">{v||'—'}</p>
                           </div>
                         ))}
                       </div>
-                      <p className="text-xs text-gray-500 mt-3">{p.anthropometrics.weightHistory}</p>
                     </div>
-                    {/* Biochemical */}
-                    <div className="bg-white rounded-xl p-5 border">
-                      <h3 className="font-semibold text-gray-800 mb-3 text-sm uppercase tracking-wide">Biochemical Data</h3>
-                      <table className="w-full text-sm">
-                        <thead><tr className="bg-gray-50 text-xs text-gray-500"><th className="p-2 text-left">Test</th><th className="p-2 text-left">Result</th><th className="p-2 text-left">Reference</th><th className="p-2 text-left">Flag</th></tr></thead>
-                        <tbody>
-                          {p.biochemical.map((b, i) => (
+                    {p.biochemical?.length > 0 && (
+                      <div className="bg-white rounded-xl p-5 border">
+                        <h3 className="text-xs uppercase tracking-wide text-gray-400 mb-3">Biochemical Data</h3>
+                        <table className="w-full text-sm">
+                          <thead><tr className="bg-gray-50 text-xs text-gray-500"><th className="p-2 text-left">Test</th><th className="p-2 text-left">Result</th><th className="p-2 text-left">Ref</th><th className="p-2 text-left">Flag</th></tr></thead>
+                          <tbody>{p.biochemical.map((b,i)=>(
                             <tr key={i} className="border-t">
                               <td className="p-2 text-gray-700">{b.test}</td>
-                              <td className="p-2 font-medium text-gray-800">{b.result}</td>
-                              <td className="p-2 text-gray-400">{b.reference}</td>
+                              <td className="p-2 font-medium">{b.result}</td>
+                              <td className="p-2 text-gray-400 text-xs">{b.reference}</td>
                               <td className="p-2"><span className={`text-xs px-2 py-0.5 rounded-full font-medium ${flagColor(b.flag)}`}>{b.flag}</span></td>
                             </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                    {/* Dietary & Lifestyle */}
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div className="bg-white rounded-xl p-5 border">
-                        <h3 className="font-semibold text-gray-800 mb-3 text-sm uppercase tracking-wide">24-Hour Dietary Recall</h3>
-                        <p className="text-sm text-gray-700 leading-relaxed">{p.dietaryRecall}</p>
-                        <div className="mt-3 pt-3 border-t">
-                          <p className="text-xs text-gray-400 mb-1">Nutrition-Focused Physical Findings</p>
-                          <p className="text-sm text-gray-700">{p.nfpf}</p>
-                        </div>
+                          ))}</tbody>
+                        </table>
                       </div>
-                      <div className="bg-white rounded-xl p-5 border">
-                        <h3 className="font-semibold text-gray-800 mb-3 text-sm uppercase tracking-wide">Lifestyle &amp; Food Security</h3>
-                        {Object.entries(p.lifestyle).map(([k, v]) => (
-                          <div key={k} className="flex justify-between py-1.5 border-b last:border-0 text-sm">
-                            <span className="text-gray-400 capitalize">{k}</span>
-                            <span className="text-gray-700 text-right ml-4">{v}</span>
-                          </div>
-                        ))}
-                        <div className="mt-3 pt-3 border-t space-y-1">
-                          {Object.entries(p.foodSecurity).map(([k, v]) => (
-                            <div key={k} className="flex justify-between text-sm">
-                              <span className="text-gray-400 capitalize">{k.replace(/([A-Z])/g, ' $1')}</span>
-                              <span className="text-gray-700 text-right ml-4">{v}</span>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    </div>
-                    {/* PES & Prescription */}
+                    )}
                     <div className="bg-white rounded-xl p-5 border">
-                      <h3 className="font-semibold text-gray-800 mb-2 text-sm uppercase tracking-wide">PES Statement</h3>
-                      <p className="text-sm text-gray-700 leading-relaxed mb-4">{p.pes}</p>
-                      <h3 className="font-semibold text-gray-800 mb-2 text-sm uppercase tracking-wide">Nutrition Prescription</h3>
+                      <h3 className="text-xs uppercase tracking-wide text-gray-400 mb-2">PES Statement</h3>
+                      <p className="text-sm text-gray-700 mb-4 leading-relaxed">{p.pes}</p>
+                      <h3 className="text-xs uppercase tracking-wide text-gray-400 mb-2">Nutrition Prescription</h3>
                       <p className="text-sm text-gray-700 leading-relaxed">{p.prescription}</p>
-                    </div>
-                    {/* Follow-up */}
-                    <div className="bg-white rounded-xl p-5 border">
-                      <h3 className="font-semibold text-gray-800 mb-3 text-sm uppercase tracking-wide">Follow-Up &amp; Referrals</h3>
-                      <p className="text-sm text-gray-700 mb-2">{p.followUp}</p>
-                      <p className="text-sm text-gray-500">{p.referrals}</p>
-                      <div className="mt-3 pt-3 border-t flex justify-between text-xs text-gray-400">
-                        <span>Signed: {p.dietitianSignature}</span>
-                        <span>Last updated: {p.lastUpdated}</span>
-                      </div>
                     </div>
                   </div>
                 );
               })()}
+
+              {/* ONBOARDING — editable form for real patients */}
+              {activeTab === 'onboarding' && (
+                <div className="space-y-4">
+                  {selected.isDemo && (
+                    <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 text-sm text-amber-700">
+                      Demo patient — changes are not saved to the database.
+                    </div>
+                  )}
+                  <div className="bg-white rounded-xl p-5 border">
+                    <h3 className="font-semibold text-gray-800 mb-4 text-sm">Patient Record</h3>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {[
+                        { label:'Date of Birth', key:'dob', type:'date' },
+                        { label:'Phone', key:'phone', placeholder:'868-XXX-XXXX' },
+                        { label:'Next Appointment', key:'nextAppointment', type:'date' },
+                        { label:'Allergies / Intolerances', key:'allergies', placeholder:'e.g. NKDA, Penicillin' },
+                      ].map(f => (
+                        <div key={f.key}>
+                          <label className="text-xs text-gray-500 font-medium">{f.label}</label>
+                          <input type={f.type || 'text'} value={onboardForm[f.key]}
+                            onChange={e => setOnboardForm({...onboardForm, [f.key]: e.target.value})}
+                            placeholder={f.placeholder || ''}
+                            className="mt-1 w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-green-500 outline-none" />
+                        </div>
+                      ))}
+                    </div>
+                    {[
+                      { label:'Diagnosis / Medical History', key:'diagnosis', placeholder:'e.g. Type 2 Diabetes, Hypertension', rows:2 },
+                      { label:'Current Dietary Goal', key:'currentGoal', placeholder:'e.g. Reduce sodium to under 2,000 mg/day.', rows:2 },
+                      { label:'Clinical Notes (PES, prescription, follow-up)', key:'clinicalNotes', placeholder:'PES statement, nutrition prescription, referrals...', rows:4 },
+                    ].map(f => (
+                      <div key={f.key} className="mt-4">
+                        <label className="text-xs text-gray-500 font-medium">{f.label}</label>
+                        <textarea value={onboardForm[f.key]} rows={f.rows}
+                          onChange={e => setOnboardForm({...onboardForm, [f.key]: e.target.value})}
+                          placeholder={f.placeholder}
+                          className="mt-1 w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-green-500 outline-none" />
+                      </div>
+                    ))}
+                    <button onClick={saveOnboarding} className="mt-5 w-full bg-green-500 text-white py-3 rounded-xl font-medium">
+                      Save patient record
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* MESSAGES — per-patient inbox/sent */}
               {activeTab === 'messages' && (
                 <div className="bg-white rounded-xl p-4 border">
-                  <h3 className="font-semibold text-gray-700 mb-4">Send message to {selected.name}</h3>
+                  <h3 className="font-semibold text-gray-700 mb-4">Messages with {selected.name}</h3>
+                  <div className="flex bg-gray-100 rounded-xl p-1 mb-4">
+                    {['inbox','sent'].map(v => (
+                      <button key={v} onClick={() => setMsgView(v)}
+                        className={`flex-1 py-1.5 rounded-lg text-xs font-medium transition-all ${msgView === v ? 'bg-white shadow text-blue-600' : 'text-gray-500'}`}>
+                        {v.charAt(0).toUpperCase() + v.slice(1)}
+                      </button>
+                    ))}
+                  </div>
                   <div className="space-y-3 mb-4 max-h-64 overflow-y-auto">
-                    {selectedMessages.length === 0 && (
-                      <p className="text-sm text-gray-400 text-center py-4">No messages yet</p>
+                    {msgView === 'inbox' && patientMessages(selected).length === 0 && (
+                      <p className="text-sm text-gray-400 text-center py-4">No messages from this patient</p>
                     )}
-                    {selectedMessages.map((m, i) => (
-                      <div key={i} className={`p-3 rounded-xl text-sm ${m.from_user_id === currentUser.id ? 'bg-green-50 text-green-800 ml-8' : 'bg-gray-50 text-gray-700 mr-8'}`}>
-                        <p className="font-medium text-xs mb-1">{m.sender_name} · {new Date(m.sent_at).toLocaleDateString()}</p>
-                        {m.body}
+                    {msgView === 'sent' && sentMessages.filter(m => m.recipient_name === selected.name).length === 0 && (
+                      <p className="text-sm text-gray-400 text-center py-4">No messages sent to this patient yet</p>
+                    )}
+                    {msgView === 'inbox' && patientMessages(selected).map((m, i) => (
+                      <div key={i} className="bg-gray-50 p-3 rounded-xl text-sm">
+                        <p className="font-medium text-xs text-gray-400 mb-1">{m.sender_name} · {new Date(m.sent_at).toLocaleDateString()}</p>
+                        <p className="text-gray-700">{m.body}</p>
+                      </div>
+                    ))}
+                    {msgView === 'sent' && sentMessages.filter(m => m.recipient_name === selected.name).map((m, i) => (
+                      <div key={i} className="bg-green-50 p-3 rounded-xl text-sm ml-4">
+                        <p className="font-medium text-xs text-gray-400 mb-1">You · {new Date(m.sent_at).toLocaleDateString()}</p>
+                        <p className="text-gray-700">{m.body}</p>
                       </div>
                     ))}
                   </div>
                   <textarea value={msgBody} onChange={e => setMsgBody(e.target.value)} rows={3}
-                    placeholder="Type a reminder or message..."
+                    placeholder={`Message to ${selected.name}...`}
                     className="w-full border rounded-lg p-3 text-sm focus:ring-2 focus:ring-green-500 outline-none" />
-                  <button onClick={sendMessage} className="mt-2 w-full bg-green-500 text-white py-2 rounded-lg text-sm font-medium">Send message</button>
+                  <button onClick={() => sendMessage(selected)} disabled={!msgBody.trim()}
+                    className="mt-2 w-full bg-green-500 text-white py-2 rounded-lg text-sm font-medium disabled:opacity-40">Send</button>
                 </div>
               )}
+
+              {/* MEAL PLAN */}
               {activeTab === 'mealplan' && (
                 <div className="bg-white rounded-xl p-4 border">
                   <h3 className="font-semibold text-gray-700 mb-4">Build meal plan for {selected.name}</h3>
                   <div className="overflow-x-auto">
                     <table className="w-full text-sm">
-                      <thead>
-                        <tr className="bg-gray-50">
-                          <th className="p-2 text-left text-gray-500">Meal</th>
-                          {DAYS.map(d => <th key={d} className="p-2 text-gray-500 capitalize">{d.slice(0,3)}</th>)}
+                      <thead><tr className="bg-gray-50"><th className="p-2 text-left text-gray-500">Meal</th>
+                        {DAYS.map(d=><th key={d} className="p-2 text-gray-500 capitalize">{d.slice(0,3)}</th>)}
+                      </tr></thead>
+                      <tbody>{SLOTS.map(slot=>(
+                        <tr key={slot} className="border-t">
+                          <td className="p-2 font-medium text-gray-600 capitalize">{slot}</td>
+                          {DAYS.map(day=>(
+                            <td key={day} className="p-1">
+                              <select value={mealPlan[day]?.[slot]?.id||''}
+                                onChange={e=>{const r=recipes.find(r=>r.id===parseInt(e.target.value));setMealPlan(prev=>({...prev,[day]:{...prev[day],[slot]:r||null}}));}}
+                                className="w-full text-xs border rounded p-1">
+                                <option value="">--</option>
+                                {recipes.filter(r=>!r.meal_type||r.meal_type.includes(slot)).map(r=>(
+                                  <option key={r.id} value={r.id}>{r.name}</option>
+                                ))}
+                              </select>
+                            </td>
+                          ))}
                         </tr>
-                      </thead>
-                      <tbody>
-                        {SLOTS.map(slot => (
-                          <tr key={slot} className="border-t">
-                            <td className="p-2 font-medium text-gray-600 capitalize">{slot}</td>
-                            {DAYS.map(day => (
-                              <td key={day} className="p-1">
-                                <select value={mealPlan[day]?.[slot]?.id || ''}
-                                  onChange={e => {
-                                    const recipe = recipes.find(r => r.id === parseInt(e.target.value));
-                                    setMealPlan(prev => ({ ...prev, [day]: { ...prev[day], [slot]: recipe || null } }));
-                                  }}
-                                  className="w-full text-xs border rounded p-1">
-                                  <option value="">--</option>
-                                  {recipes.filter(r => !r.meal_type || r.meal_type.includes(slot)).map(r => (
-                                    <option key={r.id} value={r.id}>{r.name}</option>
-                                  ))}
-                                </select>
-                              </td>
-                            ))}
-                          </tr>
-                        ))}
-                      </tbody>
+                      ))}</tbody>
                     </table>
                   </div>
                   <button onClick={pushMealPlan} className="mt-4 w-full bg-green-500 text-white py-2 rounded-lg text-sm font-medium">Push meal plan to patient</button>
                 </div>
               )}
+
+              {/* GOALS */}
               {activeTab === 'goals' && (
                 <div className="bg-white rounded-xl p-4 border">
-                  <h3 className="font-semibold text-gray-700 mb-4">Set goal for {selected.name}</h3>
+                  <h3 className="font-semibold text-gray-700 mb-3">Set goal for {selected.name}</h3>
+                  {selected.currentGoal && (
+                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-3 text-sm text-blue-700">
+                      <p className="text-xs font-semibold text-blue-400 mb-1">Current goal</p>
+                      {selected.currentGoal}
+                    </div>
+                  )}
                   <textarea value={goal} onChange={e => setGoal(e.target.value)} rows={4}
-                    placeholder="e.g. Reduce waste to under 2 items per week."
+                    placeholder="e.g. Reduce refined carbohydrates. Target HbA1c below 7.0%."
                     className="w-full border rounded-lg p-3 text-sm focus:ring-2 focus:ring-green-500 outline-none" />
-                  <button onClick={saveRecord} className="mt-3 w-full bg-green-500 text-white py-2 rounded-lg text-sm font-medium">Save goal</button>
+                  <button onClick={saveGoalForPatient} className="mt-3 w-full bg-green-500 text-white py-2 rounded-lg text-sm font-medium">Save goal for patient</button>
                 </div>
               )}
+
+              {/* RECIPES */}
               {activeTab === 'recipes' && (
                 <div className="bg-white rounded-xl p-4 border">
                   <h3 className="font-semibold text-gray-700 mb-4">Recommend a recipe to {selected.name}</h3>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                    {recipes.slice(0, 10).map(r => (
+                    {recipes.slice(0, 12).map(r => (
                       <div key={r.id} className="border rounded-xl p-3 flex justify-between items-start">
-                        <div>
+                        <div className="flex-1 mr-2">
                           <p className="font-medium text-sm text-gray-800">{r.name}</p>
                           <p className="text-xs text-gray-400">{r.prep_time}min · {r.calories}cal · {r.difficulty}</p>
+                          {r.condition_tags && (
+                            <div className="flex flex-wrap gap-1 mt-1">
+                              {r.condition_tags.split(',').map(tag => (
+                                <span key={tag} className="text-xs bg-orange-100 text-orange-600 px-1.5 py-0.5 rounded-full">{tag.trim()}</span>
+                              ))}
+                            </div>
+                          )}
                         </div>
-                        <button onClick={async () => {
-                          if (selected.isDemo) { notify(`${r.name} recommended!`); return; }
-                          await fetch(`${API}/api/messages`, {
-                            method: 'POST', headers: authHeaders(),
-                            body: JSON.stringify({ toUserId: selected.userId, body: `I recommend trying: ${r.name}. ${r.instructions?.slice(0,100)}...`, type: 'recipe' })
-                          });
-                          notify(`${r.name} recommended!`);
-                        }} className="text-xs bg-green-500 text-white px-3 py-1 rounded-lg">Send</button>
+                        <button onClick={() => recommendRecipe(r)} className="text-xs bg-green-500 text-white px-3 py-1.5 rounded-lg flex-shrink-0">Send</button>
                       </div>
                     ))}
                   </div>
@@ -832,6 +980,7 @@ function DietitianDashboard({ currentUser, onLogout, dbRecipes, config }) {
     </div>
   );
 }
+
 
 function HouseholdDashboard({ currentUser, onLogout, config }) {
   const [activeTab, setActiveTab]             = useState('pantry');
@@ -869,6 +1018,8 @@ function HouseholdDashboard({ currentUser, onLogout, config }) {
   const [leftoverItem, setLeftoverItem]       = useState('');
   const [showPdfOptions, setShowPdfOptions]   = useState(false);
   const [dismissedRecs, setDismissedRecs]     = useState([]);
+  const [showResources, setShowResources]     = useState(false);
+  const [foodCoverage, setFoodCoverage]       = useState({ coverage: {}, total_groups: 0 });
 
   const DAYS       = config.days;
   const SLOTS      = config.mealSlots;
@@ -881,12 +1032,14 @@ function HouseholdDashboard({ currentUser, onLogout, config }) {
     setTimeout(() => setNotification(''), 3000);
   }, []);
 
+  const fetchFoodCoverage = async () => { const r = await fetch(`${API}/api/food-groups/coverage`, { headers: authHeaders() }); if (r.ok) setFoodCoverage(await r.json()); };
+
   const fetchAll = async () => {
     await Promise.all([
       fetchPantry(), fetchWaste(), fetchRecipes(), fetchLeftovers(),
       fetchGoals(), fetchMealPlan(), fetchRewards(), fetchRecommendations(),
       fetchSharingStatus(), fetchNotifications(), fetchAiInsight(),
-      fetchUnits(), fetchCategories()
+      fetchUnits(), fetchCategories(), fetchFoodCoverage()
     ]);
   };
   useEffect(() => { fetchAll(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
@@ -1061,6 +1214,7 @@ function HouseholdDashboard({ currentUser, onLogout, config }) {
         </div>
         <div className="flex items-center gap-2">
           {unreadCount > 0 && <span className="bg-red-500 text-white text-xs w-5 h-5 rounded-full flex items-center justify-center">{unreadCount}</span>}
+          <button onClick={() => setShowResources(true)} className="text-xs bg-green-50 text-green-600 px-3 py-1.5 rounded-lg border border-green-200">Resources</button>
           <button onClick={() => setShowPdfOptions(true)} className="text-xs bg-blue-50 text-blue-600 px-3 py-1.5 rounded-lg border border-blue-200">Share PDF</button>
           <button onClick={onLogout} className="text-xs text-gray-400 hover:text-red-500 px-2 py-1.5 border rounded-lg">Out</button>
         </div>
@@ -1129,6 +1283,9 @@ function HouseholdDashboard({ currentUser, onLogout, config }) {
                 ))}
               </div>
             )}
+            <div className="mb-4 flex justify-center">
+              <FoodGroupHexagon coverage={foodCoverage.coverage} totalGroups={foodCoverage.total_groups} />
+            </div>
             <h3 className="text-sm font-semibold text-gray-600 mb-2">Pantry inventory</h3>
             {items.length === 0 && <div className="text-center py-12 text-gray-400"><p className="text-sm">Your pantry is empty — add your first item!</p></div>}
             {items.map(item => {
@@ -1192,14 +1349,12 @@ function HouseholdDashboard({ currentUser, onLogout, config }) {
                       {recipe.is_local === 1 && <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full">🇹🇹 Local</span>}
                     </div>
                     <p className="text-xs text-gray-400 mt-1">{recipe.prep_time}min · {recipe.calories}cal · {recipe.difficulty}</p>
-                    <div className="flex items-center gap-2 mt-2 flex-wrap">
+                    <div className="flex items-center gap-2 mt-1.5 flex-wrap">
                       <span className={`text-xs px-2 py-0.5 rounded-full ${recipe.missing === 0 ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'}`}>
                         {recipe.missing === 0 ? 'Can make now' : `Missing ${recipe.missing}`}
                       </span>
                       {recipe.missing > 0 && recipe.missingItems?.length > 0 && (
-                        <span className="text-xs text-red-500">
-                          Need: {recipe.missingItems.slice(0, 3).join(', ')}
-                        </span>
+                        <span className="text-xs text-red-500">Need: {recipe.missingItems.slice(0, 3).join(', ')}</span>
                       )}
                     </div>
                   </div>
@@ -1543,17 +1698,12 @@ function HouseholdDashboard({ currentUser, onLogout, config }) {
               </div>
             )}
             <div className="mb-4">
-              <h4 className="text-sm font-semibold text-gray-700 mb-2">Ingredients</h4>
-              {selectedRecipe.ingredients?.length > 0 ? selectedRecipe.ingredients.map((ing, i) => {
-                const isMissing = selectedRecipe.missingItems?.some(m => ing.ingredient_name?.toLowerCase().includes(m.toLowerCase()) || m.toLowerCase().includes(ing.ingredient_name?.toLowerCase()));
-                return (
-                  <span key={i} className={`inline-block text-sm px-2 py-0.5 rounded-full mr-1 mb-1 ${isMissing ? 'bg-red-100 text-red-700' : 'bg-green-50 text-green-700'}`}>
-                    {ing.quantity > 0 ? `${parseFloat(ing.quantity).toFixed(2)} ${ing.unit || ''} ${ing.ingredient_name}`.trim() : ing.ingredient_name}
-                  </span>
-                );
-              }) : selectedRecipe.ingredients_text?.split(',').map((ing, i) => (
-                <span key={i} className="inline-block text-sm px-2 py-0.5 rounded-full mr-1 mb-1 bg-green-50 text-green-700">{ing.trim()}</span>
-              ))}
+              {selectedRecipe.ingredients?.length > 0
+                ? <PortionScaler recipe={selectedRecipe} ingredients={selectedRecipe.ingredients} />
+                : selectedRecipe.ingredients_text?.split(',').map((ing, i) => (
+                    <span key={i} className="inline-block text-sm px-2 py-0.5 rounded-full mr-1 mb-1 bg-green-50 text-green-700">{ing.trim()}</span>
+                  ))
+              }
             </div>
             <div className="mb-6">
               <h4 className="text-sm font-semibold text-gray-700 mb-2">Instructions</h4>
@@ -1589,6 +1739,16 @@ function HouseholdDashboard({ currentUser, onLogout, config }) {
         </div>
       )}
 
+      {showResources && (
+        <div className="fixed inset-0 z-50 bg-white overflow-y-auto">
+          <PatientResourceHub onBack={() => setShowResources(false)} />
+        </div>
+      )}
+
+      {activeTab === 'messages_inbox' && (
+        <MessagesInboxTab API={API} authHeaders={authHeaders} currentUser={currentUser} />
+      )}
+
       {activeTab === 'settings' && (
         <SettingsTab
           currentUser={currentUser}
@@ -1606,6 +1766,7 @@ function HouseholdDashboard({ currentUser, onLogout, config }) {
             { tab: 'allrecipes', label: 'Browse',  icon: <><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></> },
             { tab: 'mealplan',   label: 'Planner', icon: <><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></> },
             { tab: 'stats',      label: 'Stats',   icon: <><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></> },
+            { tab: 'messages_inbox', label: 'Messages', icon: <><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></> },
             { tab: 'settings',   label: 'Settings', icon: <><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></> },
           ].map(({ tab, label, icon }) => (
             <button key={tab} onClick={() => setActiveTab(tab)}
@@ -1733,6 +1894,8 @@ function AllRecipesTab({ API, authHeaders, notify, config }) {
   const [search, setSearch]     = useState('');
   const [mealType, setMealType] = useState('');
   const [dietTag, setDietTag]   = useState('');
+  const [condition, setCondition] = useState('');
+  const CONDITION_TAGS = ['diabetic', 'hypertensive', 'heart-healthy', 'low-glycaemic'];
   const [selected, setSelected] = useState(null);
   const [loading, setLoading]   = useState(true);
 
@@ -1743,9 +1906,10 @@ function AllRecipesTab({ API, authHeaders, notify, config }) {
   const fetchAll = async () => {
     setLoading(true);
     const params = new URLSearchParams();
-    if (search)   params.append('search', search);
-    if (mealType) params.append('mealType', mealType);
-    if (dietTag)  params.append('dietary', dietTag);
+    if (search)    params.append('search', search);
+    if (mealType)  params.append('mealType', mealType);
+    if (dietTag)   params.append('dietary', dietTag);
+    if (condition) params.append('condition', condition);
     const r = await fetch(`${API}/api/recipes?${params}`, { headers: authHeaders() });
     if (r.ok) setRecipes(await r.json());
     setLoading(false);
@@ -1753,7 +1917,7 @@ function AllRecipesTab({ API, authHeaders, notify, config }) {
 
   fetchAll();
 // eslint-disable-next-line react-hooks/exhaustive-deps
-}, [search, mealType, dietTag]);
+}, [search, mealType, dietTag, condition]);
 
   return (
     <div>
@@ -1767,10 +1931,16 @@ function AllRecipesTab({ API, authHeaders, notify, config }) {
           <button key={t} onClick={() => setMealType(t)} className={`text-xs px-3 py-1 rounded-full border ${mealType === t ? 'bg-blue-500 text-white border-blue-500' : 'text-gray-500 border-gray-200'}`}>{t}</button>
         ))}
       </div>
-      <div className="flex flex-wrap gap-2 mb-4">
+      <div className="flex flex-wrap gap-2 mb-2">
         <button onClick={() => setDietTag('')} className={`text-xs px-3 py-1 rounded-full border ${dietTag === '' ? 'bg-green-500 text-white border-green-500' : 'text-gray-500 border-gray-200'}`}>All diets</button>
         {DIET_TAGS.map(tag => (
           <button key={tag} onClick={() => setDietTag(dietTag === tag ? '' : tag)} className={`text-xs px-3 py-1 rounded-full border ${dietTag === tag ? 'bg-green-500 text-white border-green-500' : 'text-gray-500 border-gray-200'}`}>{tag}</button>
+        ))}
+      </div>
+      <div className="flex flex-wrap gap-2 mb-4">
+        <button onClick={() => setCondition('')} className={`text-xs px-3 py-1 rounded-full border ${condition === '' ? 'bg-orange-500 text-white border-orange-500' : 'text-gray-500 border-gray-200'}`}>All conditions</button>
+        {CONDITION_TAGS.map(tag => (
+          <button key={tag} onClick={() => setCondition(condition === tag ? '' : tag)} className={`text-xs px-3 py-1 rounded-full border ${condition === tag ? 'bg-orange-500 text-white border-orange-500' : 'text-gray-500 border-gray-200'}`}>{tag}</button>
         ))}
       </div>
       {loading && <p className="text-center text-gray-400 py-8">Loading recipes...</p>}
@@ -1844,6 +2014,59 @@ function AllRecipesTab({ API, authHeaders, notify, config }) {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+function MessagesInboxTab({ API, authHeaders, currentUser }) {
+  const [messages, setMessages] = useState([]);
+  const [sent, setSent]         = useState([]);
+  const [loading, setLoading]   = useState(true);
+  const [view, setView]         = useState('inbox');
+
+  useEffect(() => {
+    Promise.all([
+      fetch(`${API}/api/messages`, { headers: authHeaders() }).then(r => r.ok ? r.json() : []),
+      fetch(`${API}/api/messages/sent`, { headers: authHeaders() }).then(r => r.ok ? r.json() : []),
+    ]).then(([inbox, sentData]) => { setMessages(inbox); setSent(sentData); setLoading(false); });
+  }, []); // eslint-disable-line
+
+  const list = view === 'inbox' ? messages : sent;
+
+  return (
+    <div>
+      <h2 className="text-base font-bold text-gray-800 mb-3">Messages</h2>
+      <div className="flex bg-gray-100 rounded-xl p-1 mb-4">
+        {['inbox','sent'].map(v => (
+          <button key={v} onClick={() => setView(v)}
+            className={`flex-1 py-2 rounded-lg text-sm font-medium transition-all ${view === v ? 'bg-white shadow text-blue-600' : 'text-gray-500'}`}>
+            {v.charAt(0).toUpperCase() + v.slice(1)} ({v === 'inbox' ? messages.length : sent.length})
+          </button>
+        ))}
+      </div>
+      {loading && <p className="text-center text-gray-400 py-8 text-sm">Loading...</p>}
+      {!loading && list.length === 0 && (
+        <div className="text-center py-12 text-gray-400">
+          <p className="text-sm">{view === 'inbox' ? 'No messages received yet' : 'No messages sent yet'}</p>
+          <p className="text-xs mt-1">{view === 'inbox' ? 'Messages from your dietitian appear here' : 'Messages you send appear here'}</p>
+        </div>
+      )}
+      {!loading && list.map((m, i) => (
+        <div key={i} className={`rounded-xl border p-4 mb-3 ${view === 'sent' ? 'bg-green-50 border-green-100' : 'bg-white'}`}>
+          <div className="flex justify-between items-start mb-2">
+            <div>
+              <p className="font-semibold text-sm text-gray-800">
+                {view === 'inbox' ? (m.sender_name || 'Your Dietitian') : `To: ${m.recipient_name || 'Patient'}`}
+              </p>
+              <p className="text-xs text-gray-400">{new Date(m.sent_at).toLocaleDateString('en-TT', { weekday:'short', day:'numeric', month:'short' })}</p>
+            </div>
+            <span className={`text-xs px-2 py-0.5 rounded-full ${m.type === 'recipe_recommendation' ? 'bg-green-100 text-green-700' : m.type === 'reminder' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-500'}`}>
+              {m.type === 'recipe_recommendation' ? 'Recipe' : m.type === 'reminder' ? 'Reminder' : 'Message'}
+            </span>
+          </div>
+          <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-line">{m.body}</p>
+        </div>
+      ))}
     </div>
   );
 }
