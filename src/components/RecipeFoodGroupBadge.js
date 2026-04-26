@@ -1,113 +1,190 @@
 import React from 'react';
 
-// Food group colours — matches FoodGroupHexagon
 const GROUPS = [
-  { key: 'Staples',            color: '#e8a428' },
-  { key: 'Legumes & Nuts',     color: '#8b6914' },
+  { key: 'Staples', color: '#e8a428' },
+  { key: 'Legumes & Nuts', color: '#8b6914' },
   { key: 'Foods from Animals', color: '#d04848' },
-  { key: 'Fruits',             color: '#f07010' },
-  { key: 'Vegetables',         color: '#20b040' },
-  { key: 'Fats & Oils',        color: '#f0c830' },
+  { key: 'Fruits', color: '#f07010' },
+  { key: 'Vegetables', color: '#20b040' },
+  { key: 'Fats & Oils', color: '#f0c830' },
 ];
 
-const MISSING = '#d4d4d4';
-const R = 100;
+const MISSING_COLOR = '#d4d4d4';
 
-function hexVertex(i) {
-  const angle = (Math.PI / 180) * (90 + i * 60);
-  return { x: R * Math.cos(angle), y: -R * Math.sin(angle) };
-}
+const KEYWORDS = [
+  // Staples
+  ['rice', 'Staples'],
+  ['flour', 'Staples'],
+  ['bread', 'Staples'],
+  ['oats', 'Staples'],
+  ['corn', 'Staples'],
+  ['dasheen', 'Staples'],
+  ['yam', 'Staples'],
+  ['cassava', 'Staples'],
+  ['potato', 'Staples'],
+  ['sweet potato', 'Staples'],
+  ['provision', 'Staples'],
+  ['pasta', 'Staples'],
 
-function segmentPath(i) {
-  const a = hexVertex(i);
-  const b = hexVertex((i + 1) % 6);
-  return `M 0 0 L ${a.x} ${a.y} L ${b.x} ${b.y} Z`;
-}
+  // Legumes & Nuts
+  ['lentil', 'Legumes & Nuts'],
+  ['bean', 'Legumes & Nuts'],
+  ['beans', 'Legumes & Nuts'],
+  ['pea', 'Legumes & Nuts'],
+  ['peas', 'Legumes & Nuts'],
+  ['channa', 'Legumes & Nuts'],
+  ['chickpea', 'Legumes & Nuts'],
+  ['split pea', 'Legumes & Nuts'],
+  ['dhal', 'Legumes & Nuts'],
+  ['dal', 'Legumes & Nuts'],
+  ['peanut', 'Legumes & Nuts'],
+  ['almond', 'Legumes & Nuts'],
+  ['cashew', 'Legumes & Nuts'],
 
-// Lightweight keyword → food group lookup (client-side, mirrors backend)
-const KEYWORD_MAP = [
-  ['rice','Staples'],['pasta','Staples'],['bread','Staples'],['flour','Staples'],
-  ['potato','Staples'],['yam','Staples'],['dasheen','Staples'],['cassava','Staples'],
-  ['plantain','Staples'],['noodle','Staples'],['oats','Staples'],['cornmeal','Staples'],
-  ['macaroni','Staples'],['spaghetti','Staples'],['roti','Staples'],['bake','Staples'],
-  ['cereal','Staples'],['breadfruit','Staples'],['dumpling','Staples'],
-  ['bean','Legumes & Nuts'],['pea','Legumes & Nuts'],['lentil','Legumes & Nuts'],
-  ['channa','Legumes & Nuts'],['chickpea','Legumes & Nuts'],['dhal','Legumes & Nuts'],
-  ['dal','Legumes & Nuts'],['tofu','Legumes & Nuts'],['pigeon','Legumes & Nuts'],
-  ['peanut','Legumes & Nuts'],['almond','Legumes & Nuts'],['nut','Legumes & Nuts'],
-  ['chicken','Foods from Animals'],['fish','Foods from Animals'],['beef','Foods from Animals'],
-  ['pork','Foods from Animals'],['shrimp','Foods from Animals'],['prawn','Foods from Animals'],
-  ['egg','Foods from Animals'],['tuna','Foods from Animals'],['salmon','Foods from Animals'],
-  ['turkey','Foods from Animals'],['meat','Foods from Animals'],['crab','Foods from Animals'],
-  ['lamb','Foods from Animals'],['sardine','Foods from Animals'],['carite','Foods from Animals'],
-  ['milk','Foods from Animals'],['cheese','Foods from Animals'],['yogurt','Foods from Animals'],
-  ['cream','Foods from Animals'],['butter','Foods from Animals'],
-  ['apple','Fruits'],['banana','Fruits'],['mango','Fruits'],['orange','Fruits'],
-  ['pineapple','Fruits'],['watermelon','Fruits'],['papaya','Fruits'],['pawpaw','Fruits'],
-  ['guava','Fruits'],['lime','Fruits'],['lemon','Fruits'],['cherry','Fruits'],
-  ['fruit','Fruits'],['soursop','Fruits'],['melon','Fruits'],['pomegranate','Fruits'],
-  ['spinach','Vegetables'],['tomato','Vegetables'],['carrot','Vegetables'],
-  ['broccoli','Vegetables'],['cabbage','Vegetables'],['lettuce','Vegetables'],
-  ['cucumber','Vegetables'],['pepper','Vegetables'],['onion','Vegetables'],
-  ['garlic','Vegetables'],['celery','Vegetables'],['ochro','Vegetables'],
-  ['pumpkin','Vegetables'],['callaloo','Vegetables'],['bhagi','Vegetables'],
-  ['bodi','Vegetables'],['mushroom','Vegetables'],['vegetable','Vegetables'],
-  ['christophene','Vegetables'],['chadon','Vegetables'],['shadow','Vegetables'],
-  ['oil','Fats & Oils'],['avocado','Fats & Oils'],['coconut','Fats & Oils'],
-  ['margarine','Fats & Oils'],['ghee','Fats & Oils'],
+  // Foods from Animals
+  ['chicken', 'Foods from Animals'],
+  ['beef', 'Foods from Animals'],
+  ['pork', 'Foods from Animals'],
+  ['fish', 'Foods from Animals'],
+  ['salmon', 'Foods from Animals'],
+  ['tuna', 'Foods from Animals'],
+  ['shrimp', 'Foods from Animals'],
+  ['egg', 'Foods from Animals'],
+  ['eggs', 'Foods from Animals'],
+  ['milk', 'Foods from Animals'],
+  ['yogurt', 'Foods from Animals'],
+  ['yoghurt', 'Foods from Animals'],
+  ['cheese', 'Foods from Animals'],
+
+  // Fruits
+  ['banana', 'Fruits'],
+  ['mango', 'Fruits'],
+  ['apple', 'Fruits'],
+  ['orange', 'Fruits'],
+  ['lime', 'Fruits'],
+  ['lemon', 'Fruits'],
+  ['avocado', 'Fruits'],
+  ['berries', 'Fruits'],
+
+  // Vegetables
+  ['dasheen bush', 'Vegetables'],
+  ['callaloo', 'Vegetables'],
+  ['spinach', 'Vegetables'],
+  ['okra', 'Vegetables'],
+  ['pumpkin', 'Vegetables'],
+  ['tomato', 'Vegetables'],
+  ['onion', 'Vegetables'],
+  ['garlic', 'Vegetables'],
+  ['carrot', 'Vegetables'],
+  ['broccoli', 'Vegetables'],
+  ['cabbage', 'Vegetables'],
+  ['lettuce', 'Vegetables'],
+  ['cucumber', 'Vegetables'],
+  ['green bean', 'Vegetables'],
+
+  // Fats & Oils
+  ['oil', 'Fats & Oils'],
+  ['olive oil', 'Fats & Oils'],
+  ['canola oil', 'Fats & Oils'],
+  ['coconut oil', 'Fats & Oils'],
+  ['butter', 'Fats & Oils'],
+  ['margarine', 'Fats & Oils'],
+  ['mayonnaise', 'Fats & Oils'],
 ];
 
-function inferFoodGroup(ingredientName) {
-  const lower = ingredientName.toLowerCase();
-  for (const [kw, grp] of KEYWORD_MAP) {
-    if (lower.includes(kw)) return grp;
+function normaliseIngredients(ingredients) {
+  if (!ingredients) return [];
+
+  if (typeof ingredients === 'string') {
+    return ingredients
+      .split(',')
+      .map(item => item.trim().toLowerCase())
+      .filter(Boolean);
   }
-  return null;
+
+  if (Array.isArray(ingredients)) {
+    return ingredients
+      .map(item => {
+        if (typeof item === 'string') return item;
+        return item.ingredient_name || item.name || item.item_name || '';
+      })
+      .map(item => item.trim().toLowerCase())
+      .filter(Boolean);
+  }
+
+  return [];
 }
 
-// Derive present food groups from an ingredient list or name string
-function getFoodGroupsFromIngredients(ingredients) {
-  if (!ingredients || ingredients.length === 0) return new Set();
-  const present = new Set();
-  for (const ing of ingredients) {
-    const name = ing.ingredient_name || ing.name || (typeof ing === 'string' ? ing : '');
-    const group = inferFoodGroup(name);
-    if (group) present.add(group);
-  }
-  return present;
+function getCoverage(ingredients) {
+  const coverage = {};
+
+  const normalised = normaliseIngredients(ingredients);
+
+  normalised.forEach(ingredient => {
+    KEYWORDS.forEach(([keyword, group]) => {
+      if (ingredient.includes(keyword)) {
+        coverage[group] = 1;
+      }
+    });
+  });
+
+  return coverage;
 }
 
-// food_groups prop: array of group name strings (from API)
-// OR ingredients prop: array of ingredient objects (for client-side inference)
-export default function RecipeFoodGroupBadge({ food_groups, ingredients, size = 48 }) {
-  let present;
-  if (food_groups && food_groups.length > 0) {
-    present = new Set(food_groups);
-  } else {
-    present = getFoodGroupsFromIngredients(ingredients || []);
-  }
+function hexPoint(cx, cy, r, angleDeg) {
+  const angleRad = (Math.PI / 180) * angleDeg;
+  return {
+    x: cx + r * Math.cos(angleRad),
+    y: cy + r * Math.sin(angleRad),
+  };
+}
 
-  const count = GROUPS.filter(g => present.has(g.key)).length;
+function segmentPath(index, cx, cy, r) {
+  const startAngle = -90 + index * 60;
+  const endAngle = startAngle + 60;
+  const p1 = hexPoint(cx, cy, r, startAngle);
+  const p2 = hexPoint(cx, cy, r, endAngle);
+
+  return `M ${cx} ${cy} L ${p1.x} ${p1.y} L ${p2.x} ${p2.y} Z`;
+}
+
+export default function RecipeFoodGroupBadge({ ingredients = [], size = 48 }) {
+  const coverage = getCoverage(ingredients);
+  const total = Object.keys(coverage).length;
+
+  const cx = 50;
+  const cy = 50;
+  const r = 42;
 
   return (
-    <div title={`${count}/6 food groups: ${[...present].join(', ') || 'none detected'}`}
-      style={{ display:'inline-flex', flexDirection:'column', alignItems:'center', gap:'2px' }}>
-      <svg viewBox="-110 -110 220 220" width={size} height={size}>
-        {GROUPS.map((g, i) => (
-          <path
-            key={g.key}
-            d={segmentPath(i)}
-            fill={present.has(g.key) ? g.color : MISSING}
-            stroke="#fff"
-            strokeWidth="4"
-          />
-        ))}
-        <circle cx="0" cy="0" r="30" fill="#fff" stroke="#e8e8e8" strokeWidth="2" />
-        <text x="0" y="3" textAnchor="middle" dominantBaseline="middle"
-          fontSize="22" fontWeight="700" fill="#1a1a1a" fontFamily="'DM Sans',sans-serif">
-          {count}
-        </text>
-      </svg>
-    </div>
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 100 100"
+      aria-label={`${total} food groups represented in recipe`}
+    >
+      {GROUPS.map((group, index) => (
+        <path
+          key={group.key}
+          d={segmentPath(index, cx, cy, r)}
+          fill={coverage[group.key] ? group.color : MISSING_COLOR}
+          stroke="#ffffff"
+          strokeWidth="3"
+        />
+      ))}
+
+      <circle cx={cx} cy={cy} r="15" fill="#ffffff" stroke="#e5e7eb" strokeWidth="2" />
+
+      <text
+        x={cx}
+        y={cy + 4}
+        textAnchor="middle"
+        fontSize="14"
+        fontWeight="700"
+        fill="#1f2937"
+      >
+        {total}
+      </text>
+    </svg>
   );
 }
