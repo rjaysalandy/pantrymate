@@ -445,70 +445,131 @@ function DietitianDashboard({ currentUser, onLogout, dbRecipes, config }) {
     setPatients(all);
     if (all.length) { setSelected(all[0]); setGoal(all[0]?.currentGoal||''); setMsgPatient(all[0]); }
   };
-
   const fetchSentMessages = async () => {
     const res = await fetch(`${API}/api/messages/sent`, { headers: authHeaders() });
     if (res.ok) setSentMessages(await res.json());
   };
-
   const selectPatient = (p) => {
     setSelected(p); setActiveTab('overview'); setClinicalNotes('');
     setGoal(p.currentGoal||''); setMealPlan({}); setMsgBody('');
     setOnboardForm({ dob:'', phone:'', diagnosis:'', allergies:'', currentGoal:'', nextAppointment:'', clinicalNotes:'' });
     setScreen('patients');
   };
-
   const notify = (msg) => { setNotification(msg); setTimeout(() => setNotification(''), 3000); };
-
   const sendMessage = async (targetPatient) => {
     const patient = targetPatient || selected;
-    if (!msgBody.trim() || !patient) return;
-    if (patient.isDemo) {
-      setDemoMessages(prev => ({ ...prev, [patient.userId]: [...(prev[patient.userId]||[]), { from_user_id: currentUser.id, sender_name: currentUser.name, body: msgBody, sent_at: new Date().toISOString(), type: 'reminder' }] }));
-      setMsgBody(''); notify('Message sent!'); return;
-    }
-    const res = await fetch(`${API}/api/messages`, { method: 'POST', headers: authHeaders(), body: JSON.stringify({ toUserId: patient.userId, body: msgBody, type: 'reminder' }) });
-    if (res.ok) { setMsgBody(''); notify('Message sent!'); fetchSentMessages(); }
-  };
 
+    if (!patient) {
+      notify('Please select a patient first.');
+      return;
+    }
+
+    if (!msgBody.trim()) {
+      notify('Please enter a message.');
+      return;
+    }
+
+    const targetId = patient.userId || patient.id;
+
+    if (patient.isDemo) {
+      const newMsg = {
+        id: `demo-${Date.now()}`,
+        from_user_id: currentUser.id,
+        to_user_id: patient.userId,
+        sender_name: currentUser.name,
+        recipient_name: patient.name,
+        body: msgBody.trim(),
+        sent_at: new Date().toISOString(),
+        type: 'reminder'
+      };
+
+      setDemoMessages(prev => ({
+        ...prev,
+        [patient.userId]: [...(prev[patient.userId] || []), newMsg]
+      }));
+
+      setSentMessages(prev => [newMsg, ...prev]);
+      setMsgBody('');
+      notify('Message sent!');
+      return;
+    }
+
+    if (!targetId) {
+      notify('No patient ID found.');
+      return;
+    }
+
+    try {
+      const res = await fetch(`${API}/api/messages`, {
+        method: 'POST',
+        headers: authHeaders(),
+        body: JSON.stringify({
+          toUserId: targetId,
+          body: msgBody.trim(),
+          type: 'reminder'
+        })
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        notify(data.error || 'Message could not be sent.');
+        return;
+      }
+
+      const newMsg = {
+        id: data.messageId || Date.now(),
+        from_user_id: currentUser.id,
+        to_user_id: targetId,
+        sender_name: currentUser.name,
+        recipient_name: patient.name,
+        body: msgBody.trim(),
+        sent_at: new Date().toISOString(),
+        type: 'reminder'
+      };
+
+      setSentMessages(prev => [newMsg, ...prev]);
+      setMsgBody('');
+      notify('Message sent!');
+      fetchSentMessages();
+      fetchPatients();
+    } catch (err) {
+      console.error('Send message error:', err);
+      notify('Unable to send message. Check backend connection.');
+    }
+  };
   const saveGoalForPatient = async () => {
     if (!selected) return;
     if (selected.isDemo) { notify('Goal saved!'); return; }
     await fetch(`${API}/api/goals/for-patient/${selected.userId}`, { method: 'POST', headers: authHeaders(), body: JSON.stringify({ dietitianNote: goal, followDietitianPlan: true }) });
     notify('Goal saved for patient!');
   };
-
   const saveOnboarding = async () => {
     const patient = patients.find(p => String(p.userId) === String(onboardPatient));
     if (!patient || patient.isDemo) { notify('Demo patient — not saved.'); return; }
     await fetch(`${API}/api/sharing/patient-record`, { method: 'POST', headers: authHeaders(), body: JSON.stringify({ userId: patient.userId, ...onboardForm }) });
     notify('Patient record saved!');
   };
-
   const pushMealPlan = async () => {
     if (!selected) return;
     if (selected.isDemo) { notify('Meal plan pushed!'); return; }
     await fetch(`${API}/api/mealplanner/push`, { method: 'POST', headers: authHeaders(), body: JSON.stringify({ patientId: selected.userId, planData: mealPlan }) });
     notify('Meal plan pushed to patient!');
   };
-
   const recommendRecipe = async (r) => {
     if (!selected) return;
     if (selected.isDemo) { notify(`${r.name} recommended!`); return; }
     await fetch(`${API}/api/recipes/${r.id}/recommend`, { method: 'POST', headers: authHeaders(), body: JSON.stringify({ patientId: selected.userId }) });
     notify(`${r.name} recommended!`);
   };
-
   const saveRate = (p) => {
     if (!p) return 0;
     const total = p.wasteLog?.length||0, used = p.wasteLog?.filter(w=>w.action==='used').length||0;
     return total > 0 ? Math.round((used/total)*100) : 0;
   };
-
   const patientMsgs = (p) => p?.isDemo ? (demoMessages[p.userId]||[]) : (p?.messages||[]);
   const allInbox = patients.flatMap(p => patientMsgs(p).map(m => ({ ...m, patientName: p.name }))).sort((a,b) => new Date(b.sent_at) - new Date(a.sent_at));
 
-  // SVG outline icons — matching the rest of the app
   const TILE_ICONS = {
     patients:   <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>,
     messages:   <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>,
@@ -529,7 +590,6 @@ function DietitianDashboard({ currentUser, onLogout, dbRecipes, config }) {
     <div className="min-h-screen bg-gray-50 flex flex-col">
       {notification && <div className="fixed top-4 right-4 bg-green-500 text-white px-6 py-3 rounded-xl shadow-lg z-50">{notification}</div>}
 
-      {/* Top bar */}
       <div className="bg-white border-b px-5 py-4 flex justify-between items-center">
         <div className="flex items-center gap-3">
           {screen !== 'home' && (
@@ -547,7 +607,6 @@ function DietitianDashboard({ currentUser, onLogout, dbRecipes, config }) {
         <button onClick={onLogout} className="text-xs text-gray-400 hover:text-red-500 px-3 py-1.5 border rounded-lg">Sign out</button>
       </div>
 
-      {/* HOME */}
       {screen === 'home' && (
         <div className="flex-1 p-5">
           <div className="grid grid-cols-3 gap-3 mb-6">
@@ -557,8 +616,7 @@ function DietitianDashboard({ currentUser, onLogout, dbRecipes, config }) {
           </div>
           <div className="grid grid-cols-2 gap-3">
             {TILES.map(tile => (
-              <button key={tile.id} onClick={() => setScreen(tile.id)}
-                className={`${tile.color} border rounded-2xl p-5 text-left hover:shadow-md transition-all`}>
+              <button key={tile.id} onClick={() => setScreen(tile.id)} className={`${tile.color} border rounded-2xl p-5 text-left hover:shadow-md transition-all`}>
                 <span className="block mb-3" style={{ color: tile.stroke }}>{TILE_ICONS[tile.id]}</span>
                 <p className="font-bold text-sm text-gray-800">{tile.label}</p>
                 <p className="text-xs text-gray-400 mt-0.5">{tile.sub}</p>
@@ -568,14 +626,12 @@ function DietitianDashboard({ currentUser, onLogout, dbRecipes, config }) {
         </div>
       )}
 
-      {/* PATIENTS */}
       {screen === 'patients' && (
         <div className="flex flex-1 overflow-hidden">
           <div className={`${selected ? 'hidden md:flex' : 'flex'} flex-col w-full md:w-60 bg-white border-r p-3 overflow-y-auto`}>
             <p className="text-xs font-semibold text-gray-400 uppercase mb-3">Patients ({patients.length})</p>
             {patients.map(p => (
-              <button key={p.userId} onClick={() => selectPatient(p)}
-                className={`w-full text-left p-3 rounded-xl mb-1.5 ${selected?.userId===p.userId ? 'bg-green-50 border border-green-200' : 'hover:bg-gray-50'}`}>
+              <button key={p.userId} onClick={() => selectPatient(p)} className={`w-full text-left p-3 rounded-xl mb-1.5 ${selected?.userId===p.userId ? 'bg-green-50 border border-green-200' : 'hover:bg-gray-50'}`}>
                 <div className="flex items-center gap-1.5 mb-0.5">
                   <p className="font-medium text-sm text-gray-800">{p.name}</p>
                   {p.isDemo && <span className="text-xs text-gray-400 border rounded px-1 leading-none">Demo</span>}
@@ -596,8 +652,7 @@ function DietitianDashboard({ currentUser, onLogout, dbRecipes, config }) {
                 </div>
                 <div className="flex gap-1.5 mb-4 overflow-x-auto pb-1">
                   {['overview','messages','mealplan','goals','recipes'].map(t=>(
-                    <button key={t} onClick={()=>setActiveTab(t)}
-                      className={`flex-shrink-0 px-3 py-1.5 rounded-lg text-xs font-medium ${activeTab===t ? 'bg-green-500 text-white' : 'bg-white border text-gray-600'}`}>
+                    <button key={t} onClick={()=>setActiveTab(t)} className={`flex-shrink-0 px-3 py-1.5 rounded-lg text-xs font-medium ${activeTab===t ? 'bg-green-500 text-white' : 'bg-white border text-gray-600'}`}>
                       {t.charAt(0).toUpperCase()+t.slice(1)}
                     </button>
                   ))}
@@ -622,7 +677,6 @@ function DietitianDashboard({ currentUser, onLogout, dbRecipes, config }) {
                   </div>
                 )}
 
-                {/* MESSAGES — chat bubbles, no navigation away */}
                 {activeTab==='messages' && (
                   <div className="bg-white rounded-xl border flex flex-col" style={{height:'480px'}}>
                     <div className="flex border-b">
@@ -636,28 +690,34 @@ function DietitianDashboard({ currentUser, onLogout, dbRecipes, config }) {
                       {msgView==='inbox' && patientMsgs(selected).length===0 && <p className="text-xs text-gray-400 text-center pt-8">No messages from this patient</p>}
                       {msgView==='sent' && sentMessages.filter(m=>m.recipient_name===selected.name).length===0 && <p className="text-xs text-gray-400 text-center pt-8">No messages sent to this patient</p>}
                       {msgView==='inbox' && patientMsgs(selected).map((m,i)=>(
-                        <div key={i} className="flex justify-start">
-                          <div className="bg-gray-100 rounded-2xl rounded-tl-sm px-3 py-2 max-w-xs">
-                            <p className="text-xs text-gray-400 mb-0.5">{m.sender_name} · {new Date(m.sent_at).toLocaleDateString()}</p>
-                            <p className="text-sm text-gray-800">{m.body}</p>
-                          </div>
-                        </div>
+                        <div key={i} className="flex justify-start"><div className="bg-gray-100 rounded-2xl rounded-tl-sm px-3 py-2 max-w-xs"><p className="text-xs text-gray-400 mb-0.5">{m.sender_name} · {new Date(m.sent_at).toLocaleDateString()}</p><p className="text-sm text-gray-800">{m.body}</p></div></div>
                       ))}
                       {msgView==='sent' && sentMessages.filter(m=>m.recipient_name===selected.name).map((m,i)=>(
-                        <div key={i} className="flex justify-end">
-                          <div className="bg-green-500 text-white rounded-2xl rounded-tr-sm px-3 py-2 max-w-xs">
-                            <p className="text-xs text-green-100 mb-0.5">{new Date(m.sent_at).toLocaleDateString()}</p>
-                            <p className="text-sm">{m.body}</p>
-                          </div>
-                        </div>
+                        <div key={i} className="flex justify-end"><div className="bg-green-500 text-white rounded-2xl rounded-tr-sm px-3 py-2 max-w-xs"><p className="text-xs text-green-100 mb-0.5">{new Date(m.sent_at).toLocaleDateString()}</p><p className="text-sm">{m.body}</p></div></div>
                       ))}
                     </div>
-                    <div className="border-t p-3 flex gap-2">
-                      <input value={msgBody} onChange={e=>setMsgBody(e.target.value)} onKeyDown={e=>e.key==='Enter'&&!e.shiftKey&&sendMessage(selected)}
-                        placeholder={`Message ${selected.name}...`} className="flex-1 border rounded-full px-4 py-2 text-sm focus:ring-2 focus:ring-green-500 outline-none"/>
-                      <button onClick={()=>sendMessage(selected)} disabled={!msgBody.trim()} className="bg-green-500 text-white px-4 py-2 rounded-full text-sm font-medium disabled:opacity-40">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
-                      </button>
+                    <div className="border-t bg-white p-4">
+                      <label className="block text-xs font-semibold text-gray-500 mb-2">
+                        Send message to {selected.name}
+                      </label>
+                      <div className="flex items-end gap-2">
+                        <textarea
+                          value={msgBody}
+                          onChange={e=>setMsgBody(e.target.value)}
+                          onKeyDown={e=>{
+                            if (e.key === 'Enter' && !e.shiftKey) {
+                              e.preventDefault();
+                              sendMessage(selected);
+                            }
+                          }}
+                          rows={3}
+                          placeholder={`Type a message for ${selected.name}...`}
+                          className="flex-1 border rounded-2xl px-4 py-3 text-sm resize-none focus:ring-2 focus:ring-green-500 outline-none"
+                        />
+                        <button onClick={()=>sendMessage(selected)} disabled={!msgBody.trim()} className="bg-green-500 text-white px-4 py-3 rounded-2xl text-sm font-medium disabled:opacity-40">
+                          Send
+                        </button>
+                      </div>
                     </div>
                   </div>
                 )}
@@ -704,7 +764,6 @@ function DietitianDashboard({ currentUser, onLogout, dbRecipes, config }) {
         </div>
       )}
 
-      {/* MESSAGES CENTRE */}
       {screen==='messages' && (
         <div className="flex-1 flex flex-col max-w-2xl mx-auto w-full p-4">
           <div className="flex bg-gray-100 rounded-xl p-1 mb-4">
@@ -732,20 +791,30 @@ function DietitianDashboard({ currentUser, onLogout, dbRecipes, config }) {
           </div>
           <div className="bg-white rounded-xl border p-4">
             <p className="font-semibold text-gray-700 text-sm mb-3">New message</p>
-            <select value={msgPatient?.userId||''} onChange={e=>setMsgPatient(patients.find(p=>String(p.userId)===e.target.value)||null)} className="w-full border rounded-lg p-2 text-sm mb-2 focus:ring-2 focus:ring-blue-400 outline-none">
+            <select value={msgPatient?.userId||''} onChange={e=>setMsgPatient(patients.find(p=>String(p.userId)===e.target.value)||null)} className="w-full border rounded-lg p-2 text-sm mb-3 focus:ring-2 focus:ring-blue-400 outline-none">
               <option value="">Select patient...</option>
               {patients.map(p=><option key={p.userId} value={p.userId}>{p.name}</option>)}
             </select>
-            <div className="flex gap-2">
-              <input value={msgBody} onChange={e=>setMsgBody(e.target.value)} onKeyDown={e=>e.key==='Enter'&&sendMessage(msgPatient)}
-                placeholder="Type your message..." className="flex-1 border rounded-full px-4 py-2 text-sm focus:ring-2 focus:ring-blue-400 outline-none"/>
-              <button onClick={()=>sendMessage(msgPatient)} disabled={!msgBody.trim()||!msgPatient} className="bg-blue-500 text-white px-4 py-2 rounded-full text-sm font-medium disabled:opacity-40">Send</button>
-            </div>
+            <textarea
+              value={msgBody}
+              onChange={e=>setMsgBody(e.target.value)}
+              onKeyDown={e=>{
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault();
+                  sendMessage(msgPatient);
+                }
+              }}
+              rows={4}
+              placeholder="Type your message..."
+              className="w-full border rounded-2xl px-4 py-3 text-sm resize-none focus:ring-2 focus:ring-blue-400 outline-none"
+            />
+            <button onClick={()=>sendMessage(msgPatient)} disabled={!msgBody.trim()||!msgPatient} className="mt-3 w-full bg-blue-500 text-white px-4 py-2.5 rounded-xl text-sm font-medium disabled:opacity-40">
+              Send
+            </button>
           </div>
         </div>
       )}
 
-      {/* ONBOARDING */}
       {screen==='onboarding' && (
         <div className="flex-1 overflow-y-auto p-4 max-w-2xl mx-auto w-full">
           <div className="bg-white rounded-xl p-5 border mb-4">
@@ -772,12 +841,10 @@ function DietitianDashboard({ currentUser, onLogout, dbRecipes, config }) {
         </div>
       )}
 
-      {/* RESOURCES */}
       {screen==='resources' && (
         <div className="flex-1 overflow-y-auto p-4 max-w-2xl mx-auto w-full"><DietitianResourcePanel /></div>
       )}
 
-      {/* SCHEDULER */}
       {screen==='scheduler' && (
         <div className="flex-1 flex items-center justify-center p-8">
           <div className="text-center">
@@ -793,7 +860,7 @@ function DietitianDashboard({ currentUser, onLogout, dbRecipes, config }) {
 
 
 function HouseholdDashboard({ currentUser, onLogout, config }) {
-  const [activeTab, setActiveTab]             = useState('pantry');
+  const [activeTab, setActiveTab] = useState('home');
   const [items, setItems]                     = useState([]);
   const [wasteLog, setWasteLog]               = useState([]);
   const [dbRecipes, setDbRecipes]             = useState([]);
@@ -1018,7 +1085,7 @@ function HouseholdDashboard({ currentUser, onLogout, config }) {
       )}
 
       <div className="bg-white border-b px-4 py-3 flex justify-between items-center sticky top-0 z-40">
-        <div onClick={() => setActiveTab('pantry')} className="cursor-pointer flex flex-col gap-0.5">
+        <div onClick={() => setActiveTab('home')} className="cursor-pointer flex flex-col gap-0.5">
           <LogoFull size="sm" />
           <p className="text-xs text-gray-400 pl-1">{greeting()}, {currentUser.name?.split(' ')[0] || 'there'}!</p>
         </div>
@@ -1026,13 +1093,13 @@ function HouseholdDashboard({ currentUser, onLogout, config }) {
           {unreadCount > 0 && <span className="bg-red-500 text-white text-xs w-5 h-5 rounded-full flex items-center justify-center">{unreadCount}</span>}
           <button onClick={() => setShowResources(true)} className="text-xs bg-green-50 text-green-600 px-3 py-1.5 rounded-lg border border-green-200">Resources</button>
           <button onClick={() => setShowPdfOptions(true)} className="text-xs bg-blue-50 text-blue-600 px-3 py-1.5 rounded-lg border border-blue-200">Share PDF</button>
-          <button onClick={onLogout} className="text-xs text-gray-400 hover:text-red-500 px-2 py-1.5 border rounded-lg">Out</button>
+          <button onClick={onLogout} className="text-xs text-gray-400 hover:text-red-500 px-3 py-1.5 border rounded-lg">Sign out</button>
         </div>
       </div>
 
       <div className="max-w-2xl mx-auto px-4 pt-4">
 
-        {aiInsight && (
+        {aiInsight && activeTab === 'pantry' && (
           <div className="bg-gradient-to-r from-green-50 to-emerald-50 border border-green-200 rounded-2xl p-4 mb-4">
             <div className="flex items-start gap-3">
               <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#1D9E75" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="10" rx="2"/><circle cx="12" cy="5" r="2"/><path d="M12 7v4"/><path d="M8 15h.01M16 15h.01"/><line x1="3" y1="16" x2="1" y2="16"/><line x1="21" y1="16" x2="23" y2="16"/></svg>
@@ -1058,11 +1125,40 @@ function HouseholdDashboard({ currentUser, onLogout, config }) {
           </div>
         )}
 
-        {activeTab === 'pantry' && (
-          <div className="mb-4 flex justify-center">
-            <FoodGroupHexagon coverage={foodCoverage.coverage} totalGroups={foodCoverage.total_groups} />
-          </div>
-        )}
+{activeTab === 'home' && (
+  <div className="p-5 pb-24">
+    <h2 className="text-xl font-bold text-gray-800 mb-1">
+      {greeting()}, {currentUser?.name || 'there'}
+    </h2>
+    <p className="text-sm text-gray-500 mb-5">
+      What would you like to do today?
+    </p>
+
+    <div className="grid grid-cols-2 gap-4">
+      {[
+        { tab: 'pantry', label: 'Pantry', sub: 'Manage food items', icon: <><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></> },
+        { tab: 'recipes', label: 'Recipes', sub: 'Suggested meals', icon: <><path d="M6 13.87A4 4 0 0 1 7.41 6a5.11 5.11 0 0 1 1.05-1.54 5 5 0 0 1 7.08 0A5.11 5.11 0 0 1 16.59 6 4 4 0 0 1 18 13.87V21H6Z"/><line x1="6" y1="17" x2="18" y2="17"/></> },
+        { tab: 'allrecipes', label: 'Browse', sub: 'All recipes', icon: <><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></> },
+        { tab: 'mealplan', label: 'Planner', sub: 'Weekly meals', icon: <><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></> },
+        { tab: 'stats', label: 'Stats', sub: 'Waste & rewards', icon: <><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></> },
+        { tab: 'messages_inbox', label: 'Messages', sub: 'Dietitian notes', icon: <><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></> },
+        { tab: 'settings', label: 'Settings', sub: 'Profile & sharing', icon: <><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06A1.65 1.65 0 0 0 15 19.4a1.65 1.65 0 0 0-1 .6 1.65 1.65 0 0 0-.4 1.1V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-.4-1.1 1.65 1.65 0 0 0-1-.6 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15a1.65 1.65 0 0 0-.6-1 1.65 1.65 0 0 0-1.1-.4H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.1-.4 1.65 1.65 0 0 0 .6-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06A2 2 0 1 1 7.23 3.5l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-.6 1.65 1.65 0 0 0 .4-1.1V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 .4 1.1 1.65 1.65 0 0 0 1 .6 1.65 1.65 0 0 0 1.82-.33l.06-.06A2 2 0 1 1 20.5 7.23l-.06.06A1.65 1.65 0 0 0 19.4 9c.14.37.36.7.6 1 .31.25.7.4 1.1.4H21a2 2 0 1 1 0 4h-.09c-.4 0-.79.15-1.1.4-.24.3-.46.63-.6 1z"/></> },
+      ].map(item => (
+        <button
+          key={item.tab}
+          onClick={() => setActiveTab(item.tab)}
+          className="bg-white border rounded-2xl p-5 text-left shadow-sm hover:shadow-md transition-all"
+        >
+          <svg className="text-green-600 mb-3" width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+            {item.icon}
+          </svg>
+          <p className="font-bold text-gray-800">{item.label}</p>
+          <p className="text-xs text-gray-400 mt-1">{item.sub}</p>
+        </button>
+      ))}
+    </div>
+  </div>
+)}
 
         {activeTab === 'pantry' && (
           <div>
@@ -1121,6 +1217,9 @@ function HouseholdDashboard({ currentUser, onLogout, config }) {
                 </div>
               );
             })}
+            <div className="mt-6 flex justify-center">
+              <FoodGroupHexagon coverage={foodCoverage.coverage} totalGroups={foodCoverage.total_groups} />
+            </div>
           </div>
         )}
 
@@ -1838,19 +1937,33 @@ function MessagesInboxTab({ API, authHeaders, currentUser }) {
 
   const sendToMyDietitian = async () => {
     if (!composeMsg.trim()) return;
+
     setSending(true);
-    // Get sharing status — if sharing is on, dietitian can see us;
-    // we send to the general message endpoint which the dietitian will see.
-    // The backend messages.sent endpoint returns all sent messages.
-    const res = await fetch(`${API}/api/messages`, {
-      method: 'POST', headers: authHeaders(),
-      body: JSON.stringify({ toUserId: 0, body: composeMsg, type: 'general' })
-    });
-    setSending(false);
-    if (res.ok || res.status === 400) {
-      // Even if toUserId=0 fails, note the limitation clearly
-      setComposeMsg(''); setCompose(false);
+    try {
+      const res = await fetch(`${API}/api/messages/to-dietitian`, {
+        method: 'POST',
+        headers: authHeaders(),
+        body: JSON.stringify({
+          body: composeMsg.trim(),
+          type: 'general'
+        })
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        alert(data.error || 'Message could not be sent.');
+        return;
+      }
+
+      setComposeMsg('');
+      setCompose(false);
       load();
+    } catch (err) {
+      console.error('Send to dietitian error:', err);
+      alert('Unable to send message. Check backend connection.');
+    } finally {
+      setSending(false);
     }
   };
 
@@ -1860,45 +1973,35 @@ function MessagesInboxTab({ API, authHeaders, currentUser }) {
     <div>
       <div className="flex justify-between items-center mb-3">
         <h2 className="text-base font-bold text-gray-800">Messages</h2>
-        <button onClick={() => setCompose(v => !v)}
-          className="flex items-center gap-1.5 text-xs bg-green-500 text-white px-3 py-1.5 rounded-lg">
+        <button onClick={() => setCompose(v => !v)} className="flex items-center gap-1.5 text-xs bg-green-500 text-white px-3 py-1.5 rounded-lg">
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
           {compose ? 'Cancel' : 'Compose'}
         </button>
       </div>
-
       {compose && (
         <div className="bg-white rounded-xl border p-4 mb-4">
           <p className="text-sm font-semibold text-gray-700 mb-1">Message your dietitian</p>
           <p className="text-xs text-gray-400 mb-3">Ensure data sharing is enabled in Stats so your dietitian can see your message.</p>
-          <textarea value={composeMsg} onChange={e => setComposeMsg(e.target.value)} rows={3}
-            placeholder="Type your message..."
-            className="w-full border rounded-xl p-3 text-sm focus:ring-2 focus:ring-green-500 outline-none mb-2"/>
-          <button onClick={sendToMyDietitian} disabled={!composeMsg.trim() || sending}
-            className="w-full bg-green-500 text-white py-2.5 rounded-xl text-sm font-medium disabled:opacity-40">
+          <textarea value={composeMsg} onChange={e => setComposeMsg(e.target.value)} rows={3} placeholder="Type your message..." className="w-full border rounded-xl p-3 text-sm focus:ring-2 focus:ring-green-500 outline-none mb-2"/>
+          <button onClick={sendToMyDietitian} disabled={!composeMsg.trim() || sending} className="w-full bg-green-500 text-white py-2.5 rounded-xl text-sm font-medium disabled:opacity-40">
             {sending ? 'Sending...' : 'Send message'}
           </button>
         </div>
       )}
-
       <div className="flex bg-gray-100 rounded-xl p-1 mb-4">
         {['inbox','sent'].map(v => (
-          <button key={v} onClick={() => setView(v)}
-            className={`flex-1 py-2 rounded-lg text-sm font-medium transition-all ${view === v ? 'bg-white shadow text-blue-600' : 'text-gray-500'}`}>
+          <button key={v} onClick={() => setView(v)} className={`flex-1 py-2 rounded-lg text-sm font-medium transition-all ${v === view ? 'bg-white shadow text-blue-600' : 'text-gray-500'}`}>
             {v.charAt(0).toUpperCase() + v.slice(1)} ({v === 'inbox' ? messages.length : sent.length})
           </button>
         ))}
       </div>
-
       {loading && <p className="text-center text-gray-400 py-8 text-sm">Loading...</p>}
-
       {!loading && list.length === 0 && (
         <div className="text-center py-12 text-gray-400">
           <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="mx-auto mb-3 opacity-30"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
           <p className="text-sm">{view === 'inbox' ? 'No messages from your dietitian yet' : 'No sent messages yet'}</p>
         </div>
       )}
-
       <div className="space-y-2">
         {!loading && list.map((m, i) => (
           <div key={i} className={`flex ${view === 'sent' ? 'justify-end' : 'justify-start'}`}>
@@ -1906,9 +2009,7 @@ function MessagesInboxTab({ API, authHeaders, currentUser }) {
               <p className={`text-xs mb-1 ${view === 'sent' ? 'text-green-100' : 'text-gray-400'}`}>
                 {view === 'inbox' ? (m.sender_name || 'Your Dietitian') : 'You'} · {new Date(m.sent_at).toLocaleDateString('en-TT', { day:'numeric', month:'short' })}
               </p>
-              {m.type === 'recipe_recommendation' && (
-                <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full mb-1 inline-block">Recipe from your dietitian</span>
-              )}
+              {m.type === 'recipe_recommendation' && <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full mb-1 inline-block">Recipe from your dietitian</span>}
               <p className={`text-sm leading-relaxed ${view === 'sent' ? 'text-white' : 'text-gray-800'}`}>{m.body}</p>
             </div>
           </div>
