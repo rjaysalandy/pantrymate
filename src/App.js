@@ -47,35 +47,26 @@ function authHeaders() {
 function recipeBadgeIngredients(recipe) {
   if (!recipe) return [];
 
-  const pieces = [];
+  const source = recipe.ingredients ?? recipe.recipe_ingredients ?? recipe.items ?? [];
 
-  const addValue = (value) => {
-    if (!value) return;
-    if (Array.isArray(value)) {
-      value.forEach(addValue);
-      return;
-    }
-    if (typeof value === 'object') {
-      addValue(value.ingredient_name || value.name || value.item_name || value.label || '');
-      return;
-    }
-    String(value)
-      .split(/[,;|\n]/)
+  if (Array.isArray(source)) {
+    return source
+      .map(item => {
+        if (typeof item === 'string') return item;
+        return item.ingredient_name || item.name || item.item_name || '';
+      })
+      .map(item => String(item).trim())
+      .filter(Boolean);
+  }
+
+  if (typeof source === 'string') {
+    return source
+      .split(',')
       .map(item => item.trim())
-      .filter(Boolean)
-      .forEach(item => pieces.push(item));
-  };
+      .filter(Boolean);
+  }
 
-  addValue(recipe.ingredients);
-  addValue(recipe.ingredients_text);
-  addValue(recipe.recipe_ingredients);
-  addValue(recipe.ingredient_names);
-  addValue(recipe.items);
-  addValue(recipe.missingItems);
-  addValue(recipe.missing_items);
-  addValue(recipe.name);
-
-  return [...new Set(pieces.map(item => String(item).trim()).filter(Boolean))];
+  return [];
 }
 
 function recipeMissingCount(recipe) {
@@ -783,7 +774,47 @@ function DietitianDashboard({ currentUser, onLogout, dbRecipes, config }) {
 
             {activeTab==='pantry' && <div className="bg-white rounded-xl p-4 border"><p className="font-semibold text-gray-700 text-sm mb-2">Patient pantry ({selected.items?.length||0} items)</p>{(selected.items||[]).length===0 && <p className="text-sm text-gray-400 py-4">No pantry items shared.</p>}{(selected.items||[]).map((item,i)=>{ const badge=expiryBadge(item); return <div key={i} className="flex justify-between items-center py-2 border-b last:border-0"><div><span className="text-sm text-gray-700 font-medium">{item.name}</span><p className="text-xs text-gray-400">{item.quantity} {item.unit}</p></div>{badge&&<span className={`text-xs px-2 py-0.5 rounded-full ${badge.color}`}>{badge.label}</span>}</div>; })}</div>}
 
-            {activeTab==='messages' && <div className="bg-white rounded-xl border flex flex-col" style={{height:'520px'}}><div className="flex border-b">{['inbox','sent'].map(v=><button key={v} onClick={()=>setMsgView(v)} className={`flex-1 py-2.5 text-xs font-semibold ${msgView===v ? 'border-b-2 border-green-500 text-green-600' : 'text-gray-400'}`}>{v.charAt(0).toUpperCase()+v.slice(1)}</button>)}</div><div className="flex-1 overflow-y-auto p-3 space-y-2">{msgView==='inbox' && patientMsgs(selected).length===0 && <p className="text-xs text-gray-400 text-center pt-8">No messages from this patient</p>}{msgView==='sent' && sentToPatient(selected).length===0 && <p className="text-xs text-gray-400 text-center pt-8">No messages sent to this patient</p>}{msgView==='inbox' && patientMsgs(selected).map((m,i)=><div key={i} className="flex justify-start"><div className="bg-gray-100 rounded-2xl rounded-tl-sm px-3 py-2 max-w-xs"><p className="text-xs text-gray-400 mb-0.5">{m.sender_name || selected.name} · {new Date(m.sent_at).toLocaleDateString()}</p><p className="text-sm text-gray-800">{m.body}</p></div></div>)}{msgView==='sent' && sentToPatient(selected).map((m,i)=><div key={i} className="flex justify-end"><div className="bg-green-500 text-white rounded-2xl rounded-tr-sm px-3 py-2 max-w-xs"><p className="text-xs text-green-100 mb-0.5">{new Date(m.sent_at).toLocaleDateString()}</p><p className="text-sm">{m.body}</p></div></div>)}</div><div className="border-t bg-white p-4"><label className="block text-xs font-semibold text-gray-500 mb-2">Send message to {selected.name}</label><div className="flex items-end gap-2"><textarea value={msgBody} onChange={e=>setMsgBody(e.target.value)} onKeyDown={e=>{ if(e.key==='Enter'&&!e.shiftKey){ e.preventDefault(); sendMessage(selected); } }} rows={3} placeholder={`Type a message for ${selected.name}...`} className="flex-1 border rounded-2xl px-4 py-3 text-sm resize-none focus:ring-2 focus:ring-green-500 outline-none"/><button onClick={()=>sendMessage(selected)} disabled={!msgBody.trim()} className="bg-green-500 text-white px-4 py-3 rounded-2xl text-sm font-medium disabled:opacity-40">Send</button></div></div></div>}
+            {activeTab==='messages' && (() => {
+              const thread = [
+                ...patientMsgs(selected).map(m => ({ ...m, direction: 'in' })),
+                ...sentToPatient(selected).map(m => ({ ...m, direction: 'out' }))
+              ].sort((a,b) => new Date(a.sent_at || 0) - new Date(b.sent_at || 0));
+              return (
+                <div className="bg-white rounded-xl border flex flex-col overflow-hidden" style={{height:'560px'}}>
+                  <div className="border-b px-4 py-3 bg-gray-50">
+                    <p className="text-sm font-semibold text-gray-800">Chat with {selected.name}</p>
+                    <p className="text-xs text-gray-400">Messages are shown as one conversation thread.</p>
+                  </div>
+                  <div className="flex-1 overflow-y-auto p-4 space-y-3">
+                    {thread.length===0 && <p className="text-xs text-gray-400 text-center pt-8">No messages yet</p>}
+                    {thread.map((m,i)=>(
+                      <div key={i} className={`flex ${m.direction==='out' ? 'justify-end' : 'justify-start'}`}>
+                        <div className={`rounded-2xl px-4 py-3 max-w-xs md:max-w-sm ${m.direction==='out' ? 'bg-green-500 text-white rounded-tr-sm' : 'bg-gray-100 text-gray-800 rounded-tl-sm'}`}>
+                          <p className={`text-xs mb-1 ${m.direction==='out' ? 'text-green-100' : 'text-gray-400'}`}>
+                            {m.direction==='out' ? 'You' : (m.sender_name || selected.name)} · {new Date(m.sent_at).toLocaleDateString('en-TT', { day:'numeric', month:'short' })}
+                          </p>
+                          <p className="text-sm leading-relaxed">{m.body}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="border-t bg-white p-4">
+                    <label className="block text-xs font-semibold text-gray-500 mb-2">Send message to {selected.name}</label>
+                    <div className="flex items-end gap-2">
+                      <textarea
+                        value={msgBody}
+                        onChange={e=>setMsgBody(e.target.value)}
+                        onKeyDown={e=>{ if(e.key==='Enter'&&!e.shiftKey){ e.preventDefault(); sendMessage(selected); } }}
+                        rows={3}
+                        placeholder={`Type a message for ${selected.name}...`}
+                        className="flex-1 border rounded-2xl px-4 py-3 text-sm resize-none focus:ring-2 focus:ring-green-500 outline-none"
+                      />
+                      <button onClick={()=>sendMessage(selected)} disabled={!msgBody.trim()} className="bg-green-500 text-white px-4 py-3 rounded-2xl text-sm font-medium disabled:opacity-40">Send</button>
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
 
             {activeTab==='mealplan' && <div className="bg-white rounded-xl p-4 border"><p className="font-semibold text-gray-700 mb-4 text-sm">Meal plan for {selected.name}</p><div className="overflow-x-auto"><table className="w-full text-xs"><thead><tr className="bg-gray-50"><th className="p-2 text-left text-gray-500">Meal</th>{DAYS.map(d=><th key={d} className="p-2 text-gray-500 capitalize">{d.slice(0,3)}</th>)}</tr></thead><tbody>{SLOTS.map(slot=><tr key={slot} className="border-t"><td className="p-2 font-medium text-gray-600 capitalize">{slot}</td>{DAYS.map(day=><td key={day} className="p-1"><select value={mealPlan[day]?.[slot]?.id||''} onChange={e=>{const r=recipes.find(r=>String(r.id)===String(e.target.value));setMealPlan(prev=>({...prev,[day]:{...prev[day],[slot]:r||null}}));}} className="w-full text-xs border rounded p-0.5"><option value="">--</option>{recipes.filter(r=>!r.meal_type||String(r.meal_type).includes(slot)).map(r=><option key={r.id} value={r.id}>{r.name}</option>)}</select></td>)}</tr>)}</tbody></table></div><button onClick={pushMealPlan} className="mt-4 w-full bg-green-500 text-white py-2 rounded-lg text-sm font-medium">Push to patient</button></div>}
 
@@ -794,7 +825,48 @@ function DietitianDashboard({ currentUser, onLogout, dbRecipes, config }) {
         </div>
       </div>}
 
-      {screen==='messages' && <div className="flex-1 flex flex-col max-w-2xl mx-auto w-full p-4"><div className="flex bg-gray-100 rounded-xl p-1 mb-4">{['inbox','sent'].map(v=><button key={v} onClick={()=>setMsgView(v)} className={`flex-1 py-2 rounded-lg text-sm font-medium ${msgView===v ? 'bg-white shadow text-blue-600' : 'text-gray-500'}`}>{v.charAt(0).toUpperCase()+v.slice(1)} ({v==='inbox'?allInbox.length:sentMessages.length})</button>)}</div><div className="flex-1 overflow-y-auto space-y-2 mb-4">{msgView==='inbox' && allInbox.length===0 && <p className="text-sm text-gray-400 text-center py-12">No messages received yet</p>}{msgView==='sent' && sentMessages.length===0 && <p className="text-sm text-gray-400 text-center py-12">No messages sent yet</p>}{msgView==='inbox' && allInbox.map((m,i)=><div key={i} className="bg-white rounded-xl border p-4"><div className="flex justify-between mb-1"><p className="font-semibold text-sm text-gray-800">{m.patientName}</p><p className="text-xs text-gray-400">{new Date(m.sent_at).toLocaleDateString()}</p></div><p className="text-sm text-gray-700">{m.body}</p></div>)}{msgView==='sent' && sentMessages.map((m,i)=><div key={i} className="bg-blue-50 rounded-xl border border-blue-100 p-4"><div className="flex justify-between mb-1"><p className="font-semibold text-sm text-gray-800">To: {m.recipient_name}</p><p className="text-xs text-gray-400">{new Date(m.sent_at).toLocaleDateString()}</p></div><p className="text-sm text-gray-700">{m.body}</p></div>)}</div><div className="bg-white rounded-xl border p-4"><p className="font-semibold text-gray-700 text-sm mb-3">New message</p><select value={msgPatient?.userId||''} onChange={e=>setMsgPatient(patients.find(p=>String(p.userId)===e.target.value)||null)} className="w-full border rounded-lg p-2 text-sm mb-3 focus:ring-2 focus:ring-blue-400 outline-none"><option value="">Select patient...</option>{patients.map(p=><option key={p.userId} value={p.userId}>{p.name}</option>)}</select><textarea value={msgBody} onChange={e=>setMsgBody(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendMessage(msgPatient);}}} rows={4} placeholder="Type your message..." className="w-full border rounded-2xl px-4 py-3 text-sm resize-none focus:ring-2 focus:ring-blue-400 outline-none"/><button onClick={()=>sendMessage(msgPatient)} disabled={!msgBody.trim()||!msgPatient} className="mt-3 w-full bg-blue-500 text-white px-4 py-2.5 rounded-xl text-sm font-medium disabled:opacity-40">Send</button></div></div>}
+      {screen==='messages' && (() => {
+        const activePatient = msgPatient || patients[0] || null;
+        const thread = activePatient ? [
+          ...patientMsgs(activePatient).map(m => ({ ...m, direction: 'in' })),
+          ...sentToPatient(activePatient).map(m => ({ ...m, direction: 'out' }))
+        ].sort((a,b) => new Date(a.sent_at || 0) - new Date(b.sent_at || 0)) : [];
+        return (
+          <div className="flex-1 flex flex-col max-w-2xl mx-auto w-full p-4">
+            <div className="bg-white rounded-xl border p-4 mb-4">
+              <p className="font-semibold text-gray-700 text-sm mb-3">Select patient chat</p>
+              <select value={activePatient?.userId||''} onChange={e=>setMsgPatient(patients.find(p=>String(p.userId)===e.target.value)||null)} className="w-full border rounded-lg p-2 text-sm focus:ring-2 focus:ring-blue-400 outline-none">
+                <option value="">Select patient...</option>
+                {patients.map(p=><option key={p.userId} value={p.userId}>{p.name}</option>)}
+              </select>
+            </div>
+            <div className="bg-white rounded-xl border flex flex-col overflow-hidden flex-1 min-h-[520px]">
+              <div className="border-b px-4 py-3 bg-gray-50">
+                <p className="text-sm font-semibold text-gray-800">{activePatient ? `Chat with ${activePatient.name}` : 'Chat'}</p>
+                <p className="text-xs text-gray-400">Inbox and sent messages are combined into one conversation.</p>
+              </div>
+              <div className="flex-1 overflow-y-auto p-4 space-y-3">
+                {!activePatient && <p className="text-sm text-gray-400 text-center py-12">Select a patient to start chatting</p>}
+                {activePatient && thread.length===0 && <p className="text-sm text-gray-400 text-center py-12">No messages yet</p>}
+                {thread.map((m,i)=>(
+                  <div key={i} className={`flex ${m.direction==='out' ? 'justify-end' : 'justify-start'}`}>
+                    <div className={`rounded-2xl px-4 py-3 max-w-xs md:max-w-sm ${m.direction==='out' ? 'bg-blue-500 text-white rounded-tr-sm' : 'bg-gray-100 text-gray-800 rounded-tl-sm'}`}>
+                      <p className={`text-xs mb-1 ${m.direction==='out' ? 'text-blue-100' : 'text-gray-400'}`}>
+                        {m.direction==='out' ? 'You' : (m.sender_name || activePatient?.name || 'Patient')} · {new Date(m.sent_at).toLocaleDateString('en-TT', { day:'numeric', month:'short' })}
+                      </p>
+                      <p className="text-sm leading-relaxed">{m.body}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <div className="border-t bg-white p-4">
+                <textarea value={msgBody} onChange={e=>setMsgBody(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendMessage(activePatient);}}} rows={3} placeholder={activePatient ? `Type a message for ${activePatient.name}...` : 'Select a patient first'} className="w-full border rounded-2xl px-4 py-3 text-sm resize-none focus:ring-2 focus:ring-blue-400 outline-none"/>
+                <button onClick={()=>sendMessage(activePatient)} disabled={!msgBody.trim()||!activePatient} className="mt-3 w-full bg-blue-500 text-white px-4 py-2.5 rounded-xl text-sm font-medium disabled:opacity-40">Send</button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {screen==='onboarding' && <div className="flex-1 overflow-y-auto p-4 max-w-2xl mx-auto w-full"><div className="bg-white rounded-xl p-5 border mb-4"><p className="font-semibold text-gray-800 mb-2 text-sm">Patient onboarding</p><p className="text-sm text-gray-500 mb-4">Create a standalone patient record. This is not linked to an existing shared patient list.</p>{!showOnboardForm && <button onClick={()=>setShowOnboardForm(true)} className="w-full bg-purple-600 text-white py-3 rounded-xl font-medium">Create New Patient Record</button>}</div>{showOnboardForm && <div className="bg-white rounded-xl p-5 border"><p className="font-semibold text-gray-800 mb-4 text-sm">New patient record</p><div className="grid grid-cols-1 md:grid-cols-2 gap-4">{[{label:'Full Name',key:'name',placeholder:'Patient name'},{label:'Email',key:'email',placeholder:'patient@example.com'},{label:'Date of Birth',key:'dob',type:'date'},{label:'Phone',key:'phone',placeholder:'868-XXX-XXXX'},{label:'Next Appointment',key:'nextAppointment',type:'date'},{label:'Allergies',key:'allergies',placeholder:'e.g. NKDA'}].map(f=><div key={f.key}><label className="text-xs text-gray-500 font-medium">{f.label}</label><input type={f.type||'text'} value={onboardForm[f.key]} onChange={e=>setOnboardForm({...onboardForm,[f.key]:e.target.value})} placeholder={f.placeholder||''} className="mt-1 w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-purple-400 outline-none"/></div>)}</div>{[{label:'Diagnosis / Medical History',key:'diagnosis',placeholder:'e.g. Type 2 Diabetes, Hypertension',rows:2},{label:'Current Dietary Goal',key:'currentGoal',placeholder:'e.g. Reduce sodium to under 2,000 mg/day.',rows:2},{label:'Clinical Notes',key:'clinicalNotes',placeholder:'PES statement, nutrition prescription, referrals...',rows:4}].map(f=><div key={f.key} className="mt-4"><label className="text-xs text-gray-500 font-medium">{f.label}</label><textarea value={onboardForm[f.key]} rows={f.rows} onChange={e=>setOnboardForm({...onboardForm,[f.key]:e.target.value})} placeholder={f.placeholder} className="mt-1 w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-purple-400 outline-none"/></div>)}<div className="flex gap-2 mt-5"><button onClick={()=>setShowOnboardForm(false)} className="flex-1 border rounded-xl py-3 text-gray-600 text-sm font-medium">Cancel</button><button onClick={saveOnboarding} className="flex-1 bg-purple-600 text-white py-3 rounded-xl font-medium">Save patient record</button></div></div>}</div>}
 
@@ -1072,6 +1144,8 @@ function HouseholdDashboard({ currentUser, onLogout, config }) {
         </div>
         <div className="flex items-center gap-2">
           {unreadCount > 0 && <span className="bg-red-500 text-white text-xs w-5 h-5 rounded-full flex items-center justify-center">{unreadCount}</span>}
+          <button onClick={() => setShowResources(true)} className="text-xs bg-green-50 text-green-600 px-3 py-1.5 rounded-lg border border-green-200">Resources</button>
+          <button onClick={() => setShowPdfOptions(true)} className="text-xs bg-blue-50 text-blue-600 px-3 py-1.5 rounded-lg border border-blue-200">Share PDF</button>
           <button onClick={onLogout} className="text-xs text-gray-400 hover:text-red-500 px-3 py-1.5 border rounded-lg">Sign out</button>
         </div>
       </div>
@@ -1909,144 +1983,116 @@ function AllRecipesTab({ API, authHeaders, notify, config }) {
 }
 
 function MessagesInboxTab({ API, authHeaders, currentUser }) {
-  const [messages, setMessages] = useState([]);
-  const [sent, setSent] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [view, setView] = useState('inbox');
+  const [messages, setMessages]     = useState([]);
+  const [sent, setSent]             = useState([]);
+  const [loading, setLoading]       = useState(true);
   const [composeMsg, setComposeMsg] = useState('');
-  const [sending, setSending] = useState(false);
-  const [error, setError] = useState('');
+  const [sending, setSending]       = useState(false);
 
-  const load = useCallback(() => {
+  const load = () => {
     setLoading(true);
     Promise.all([
-      fetch(`${API}/api/messages`, { headers: authHeaders() }).then(r => r.ok ? r.json() : []),
+      fetch(`${API}/api/messages`,      { headers: authHeaders() }).then(r => r.ok ? r.json() : []),
       fetch(`${API}/api/messages/sent`, { headers: authHeaders() }).then(r => r.ok ? r.json() : []),
-    ])
-      .then(([inbox, sentData]) => {
-        setMessages(Array.isArray(inbox) ? inbox : []);
-        setSent(Array.isArray(sentData) ? sentData : []);
-      })
-      .finally(() => setLoading(false));
-  }, [API, authHeaders]);
-
-  useEffect(() => { load(); }, [load]);
+    ]).then(([inbox, sentData]) => {
+      setMessages(inbox || []);
+      setSent(sentData || []);
+      setLoading(false);
+    }).catch(() => setLoading(false));
+  };
+  useEffect(() => { load(); }, []); // eslint-disable-line
 
   const sendToMyDietitian = async () => {
     if (!composeMsg.trim()) return;
 
     setSending(true);
-    setError('');
-
     try {
       const res = await fetch(`${API}/api/messages/to-dietitian`, {
         method: 'POST',
         headers: authHeaders(),
         body: JSON.stringify({
-          audience: 'dietitian',
           body: composeMsg.trim(),
           type: 'msg'
         })
       });
 
-      const data = await res.json().catch(() => ({}));
+      const data = await res.json();
 
       if (!res.ok) {
-        setError(data.error || 'Message could not be sent.');
+        alert(data.error || 'Message could not be sent.');
         return;
       }
 
-      const newMessage = {
-        id: data.messageId || `sent-${Date.now()}`,
+      setSent(prev => [{
+        id: data.messageId || Date.now(),
         from_user_id: currentUser?.id,
         to_user_id: null,
         audience: 'dietitian',
         sender_name: currentUser?.name || 'You',
-        recipient_name: 'Dietitian team',
+        recipient_name: 'Dietitian Portal',
         body: composeMsg.trim(),
         sent_at: new Date().toISOString(),
         type: 'msg'
-      };
+      }, ...prev]);
 
-      setSent(prev => [newMessage, ...prev]);
       setComposeMsg('');
-      setView('sent');
       load();
     } catch (err) {
       console.error('Send to dietitian error:', err);
-      setError('Unable to send message. Check backend connection.');
+      alert('Unable to send message. Check backend connection.');
     } finally {
       setSending(false);
     }
   };
 
-  const list = view === 'inbox' ? messages : sent;
+  const thread = [
+    ...messages.map(m => ({ ...m, direction: 'in' })),
+    ...sent.map(m => ({ ...m, direction: 'out' }))
+  ].sort((a,b) => new Date(a.sent_at || 0) - new Date(b.sent_at || 0));
 
   return (
-    <div className="bg-white rounded-xl border flex flex-col overflow-hidden" style={{ minHeight: '620px' }}>
-      <div className="flex bg-gray-100 p-1 m-4 rounded-xl">
-        {['inbox','sent'].map(v => (
-          <button
-            key={v}
-            onClick={() => setView(v)}
-            className={`flex-1 py-2 rounded-lg text-sm font-medium transition-all ${v === view ? 'bg-white shadow text-blue-600' : 'text-gray-500'}`}
-          >
-            {v.charAt(0).toUpperCase() + v.slice(1)} ({v === 'inbox' ? messages.length : sent.length})
-          </button>
-        ))}
+    <div className="bg-white rounded-xl border flex flex-col overflow-hidden" style={{height:'620px'}}>
+      <div className="border-b px-4 py-3 bg-gray-50">
+        <h2 className="text-base font-bold text-gray-800">Chat with Dietitian Portal</h2>
+        <p className="text-xs text-gray-400">Messages are shown as one conversation thread.</p>
       </div>
 
-      <div className="flex-1 overflow-y-auto px-4 pb-4 space-y-2">
+      <div className="flex-1 overflow-y-auto p-4 space-y-3">
         {loading && <p className="text-center text-gray-400 py-8 text-sm">Loading...</p>}
 
-        {!loading && list.length === 0 && (
+        {!loading && thread.length === 0 && (
           <div className="text-center py-12 text-gray-400">
             <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="mx-auto mb-3 opacity-30"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
-            <p className="text-sm">{view === 'inbox' ? 'No messages from your dietitian yet' : 'No sent messages yet'}</p>
+            <p className="text-sm">No messages yet</p>
           </div>
         )}
 
-        {!loading && list.map((m, i) => (
-          <div key={m.id || i} className={`flex ${view === 'sent' ? 'justify-end' : 'justify-start'}`}>
-            <div className={`rounded-2xl px-4 py-3 max-w-xs md:max-w-sm ${view === 'sent' ? 'bg-green-500 text-white rounded-tr-sm' : 'bg-gray-100 rounded-tl-sm'}`}>
-              <p className={`text-xs mb-1 ${view === 'sent' ? 'text-green-100' : 'text-gray-400'}`}>
-                {view === 'inbox' ? (m.sender_name || 'Your Dietitian') : 'You'} · {new Date(m.sent_at).toLocaleDateString('en-TT', { day:'numeric', month:'short' })}
+        {!loading && thread.map((m, i) => (
+          <div key={i} className={`flex ${m.direction === 'out' ? 'justify-end' : 'justify-start'}`}>
+            <div className={`rounded-2xl px-4 py-3 max-w-xs md:max-w-sm ${m.direction === 'out' ? 'bg-green-500 text-white rounded-tr-sm' : 'bg-gray-100 text-gray-800 rounded-tl-sm'}`}>
+              <p className={`text-xs mb-1 ${m.direction === 'out' ? 'text-green-100' : 'text-gray-400'}`}>
+                {m.direction === 'out' ? 'You' : (m.sender_name || 'Dietitian')} · {new Date(m.sent_at).toLocaleDateString('en-TT', { day:'numeric', month:'short' })}
               </p>
               {m.type === 'recipe_recommendation' && <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full mb-1 inline-block">Recipe from your dietitian</span>}
-              <p className={`text-sm leading-relaxed ${view === 'sent' ? 'text-white' : 'text-gray-800'}`}>{m.body}</p>
+              <p className="text-sm leading-relaxed">{m.body}</p>
             </div>
           </div>
         ))}
       </div>
 
-      <div className="border-t bg-white p-5 flex justify-center">
-        <div className="w-full max-w-xl">
-          <p className="text-sm font-semibold text-gray-700 mb-1">Message your dietitian</p>
-          <p className="text-xs text-gray-400 mb-3">Messages are sent to the shared dietitian inbox.</p>
-          {error && <div className="mb-3 bg-red-50 border border-red-200 text-red-600 text-sm rounded-xl px-3 py-2">{error}</div>}
-          <div className="flex items-end gap-3">
-            <textarea
-              value={composeMsg}
-              onChange={e => setComposeMsg(e.target.value)}
-              onKeyDown={e => {
-                if (e.key === 'Enter' && !e.shiftKey) {
-                  e.preventDefault();
-                  sendToMyDietitian();
-                }
-              }}
-              rows={4}
-              placeholder="Type your message..."
-              className="flex-1 border rounded-2xl px-4 py-3 text-sm resize-none focus:ring-2 focus:ring-green-500 outline-none"
-            />
-            <button
-              onClick={sendToMyDietitian}
-              disabled={!composeMsg.trim() || sending}
-              className="bg-green-500 text-white px-6 py-4 rounded-2xl text-sm font-semibold disabled:opacity-40"
-            >
-              {sending ? 'Sending...' : 'Send'}
-            </button>
-          </div>
-        </div>
+      <div className="border-t bg-white p-4">
+        <label className="block text-xs font-semibold text-gray-500 mb-2">Message your dietitian</label>
+        <textarea
+          value={composeMsg}
+          onChange={e => setComposeMsg(e.target.value)}
+          onKeyDown={e=>{ if(e.key==='Enter'&&!e.shiftKey){ e.preventDefault(); sendToMyDietitian(); } }}
+          rows={3}
+          placeholder="Type your message..."
+          className="w-full border rounded-2xl px-4 py-3 text-sm resize-none focus:ring-2 focus:ring-green-500 outline-none"
+        />
+        <button onClick={sendToMyDietitian} disabled={!composeMsg.trim() || sending} className="mt-3 w-full bg-green-500 text-white py-2.5 rounded-xl text-sm font-medium disabled:opacity-40">
+          {sending ? 'Sending...' : 'Send message'}
+        </button>
       </div>
     </div>
   );
