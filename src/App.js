@@ -802,7 +802,7 @@ function DietitianDashboard({ currentUser, onLogout, dbRecipes, config }) {
 
             {activeTab==='pantry' && <div className="bg-white rounded-xl p-4 border"><p className="font-semibold text-gray-700 text-sm mb-2">Patient pantry ({selected.items?.length||0} items)</p>{(selected.items||[]).length===0 && <p className="text-sm text-gray-400 py-4">No pantry items shared.</p>}{(selected.items||[]).map((item,i)=>{ const badge=expiryBadge(item); return <div key={i} className="flex justify-between items-center py-2 border-b last:border-0"><div><span className="text-sm text-gray-700 font-medium">{item.name}</span><p className="text-xs text-gray-400">{item.quantity} {item.unit}</p></div>{badge&&<span className={`text-xs px-2 py-0.5 rounded-full ${badge.color}`}>{badge.label}</span>}</div>; })}</div>}
 
-            {activeTab==='messages' && <div className="bg-white rounded-xl border flex flex-col" style={{height:'520px'}}><div className="flex border-b">{['inbox','sent'].map(v=><button key={v} onClick={()=>setMsgView(v)} className={`flex-1 py-2.5 text-xs font-semibold ${msgView===v ? 'border-b-2 border-green-500 text-green-600' : 'text-gray-400'}`}>{v.charAt(0).toUpperCase()+v.slice(1)}</button>)}</div><div className="flex-1 overflow-y-auto p-3 space-y-2">{msgView==='inbox' && patientMsgs(selected).length===0 && <p className="text-xs text-gray-400 text-center pt-8">No messages from this patient</p>}{msgView==='sent' && sentToPatient(selected).length===0 && <p className="text-xs text-gray-400 text-center pt-8">No messages sent to this patient</p>}{msgView==='inbox' && patientMsgs(selected).map((m,i)=><div key={i} className="flex justify-start"><div className="bg-gray-100 rounded-2xl rounded-tl-sm px-3 py-2 max-w-xs"><p className="text-xs text-gray-400 mb-0.5">{m.sender_name || selected.name} · {new Date(m.sent_at).toLocaleDateString()}</p><p className="text-sm text-gray-800">{m.body}</p></div></div>)}{msgView==='sent' && sentToPatient(selected).map((m,i)=><div key={i} className="flex justify-end"><div className="bg-green-500 text-white rounded-2xl rounded-tr-sm px-3 py-2 max-w-xs"><p className="text-xs text-green-100 mb-0.5">{new Date(m.sent_at).toLocaleDateString()}</p><p className="text-sm">{m.body}</p></div></div>)}</div><div className="border-t bg-white p-4"><label className="block text-xs font-semibold text-gray-500 mb-2">Send message to {selected.name}</label><div className="flex items-end gap-2"><textarea value={msgBody} onChange={e=>setMsgBody(e.target.value)} onKeyDown={e=>{ if(e.key==='Enter'&&!e.shiftKey){ e.preventDefault(); sendMessage(selected); } }} rows={3} placeholder={`Type a message for ${selected.name}...`} className="flex-1 border rounded-2xl px-4 py-3 text-sm resize-none focus:ring-2 focus:ring-green-500 outline-none"/><button onClick={()=>sendMessage(selected)} disabled={!msgBody.trim()} className="bg-green-500 text-white px-4 py-3 rounded-2xl text-sm font-medium disabled:opacity-40">Send</button></div></div></div>}
+            {activeTab==='messages' && (() => { const thread = [...patientMsgs(selected).map(m=>({...m,_side:'in'})), ...sentToPatient(selected).map(m=>({...m,_side:'out'}))].sort((a,b)=>new Date(a.sent_at)-new Date(b.sent_at)); return <div className="bg-white rounded-xl border flex flex-col" style={{height:'560px'}}><div className="border-b bg-gray-50 px-4 py-3"><p className="font-semibold text-gray-800 text-sm">Chat with {selected.name}</p><p className="text-xs text-gray-400">Patient and dietitian messages are shown in one conversation.</p></div><div className="flex-1 overflow-y-auto p-4 space-y-3">{thread.length===0 && <p className="text-xs text-gray-400 text-center pt-8">No messages yet</p>}{thread.map((m,i)=><div key={i} className={`flex ${m._side==='out' ? 'justify-end' : 'justify-start'}`}><div className={`rounded-2xl px-4 py-3 max-w-xs md:max-w-sm ${m._side==='out' ? 'bg-green-500 text-white rounded-tr-sm' : 'bg-gray-100 text-gray-800 rounded-tl-sm'}`}><p className={`text-xs mb-1 ${m._side==='out' ? 'text-green-100' : 'text-gray-400'}`}>{m._side==='out' ? 'You' : (m.sender_name || selected.name)} · {new Date(m.sent_at).toLocaleDateString('en-TT',{day:'numeric',month:'short'})}</p><p className="text-sm leading-relaxed">{m.body}</p></div></div>)}</div><div className="border-t bg-white p-4"><label className="block text-xs font-semibold text-gray-500 mb-2">Send message to {selected.name}</label><div className="flex items-end gap-2"><textarea value={msgBody} onChange={e=>setMsgBody(e.target.value)} onKeyDown={e=>{ if(e.key==='Enter'&&!e.shiftKey){ e.preventDefault(); sendMessage(selected); } }} rows={3} placeholder={`Type a message for ${selected.name}...`} className="flex-1 border rounded-2xl px-4 py-3 text-sm resize-none focus:ring-2 focus:ring-green-500 outline-none"/><button onClick={()=>sendMessage(selected)} disabled={!msgBody.trim()} className="bg-green-500 text-white px-4 py-3 rounded-2xl text-sm font-medium disabled:opacity-40">Send</button></div></div></div>; })()}
 
             {activeTab==='mealplan' && <div className="bg-white rounded-xl p-4 border"><p className="font-semibold text-gray-700 mb-4 text-sm">Meal plan for {selected.name}</p><div className="overflow-x-auto"><table className="w-full text-xs"><thead><tr className="bg-gray-50"><th className="p-2 text-left text-gray-500">Meal</th>{DAYS.map(d=><th key={d} className="p-2 text-gray-500 capitalize">{d.slice(0,3)}</th>)}</tr></thead><tbody>{SLOTS.map(slot=><tr key={slot} className="border-t"><td className="p-2 font-medium text-gray-600 capitalize">{slot}</td>{DAYS.map(day=><td key={day} className="p-1"><select value={mealPlan[day]?.[slot]?.id||''} onChange={e=>{const r=recipes.find(r=>String(r.id)===String(e.target.value));setMealPlan(prev=>({...prev,[day]:{...prev[day],[slot]:r||null}}));}} className="w-full text-xs border rounded p-0.5"><option value="">--</option>{recipes.filter(r=>!r.meal_type||String(r.meal_type).includes(slot)).map(r=><option key={r.id} value={r.id}>{r.name}</option>)}</select></td>)}</tr>)}</tbody></table></div><button onClick={pushMealPlan} className="mt-4 w-full bg-green-500 text-white py-2 rounded-lg text-sm font-medium">Push to patient</button></div>}
 
@@ -813,7 +813,7 @@ function DietitianDashboard({ currentUser, onLogout, dbRecipes, config }) {
         </div>
       </div>}
 
-      {screen==='messages' && <div className="flex-1 flex flex-col max-w-2xl mx-auto w-full p-4"><div className="flex bg-gray-100 rounded-xl p-1 mb-4">{['inbox','sent'].map(v=><button key={v} onClick={()=>setMsgView(v)} className={`flex-1 py-2 rounded-lg text-sm font-medium ${msgView===v ? 'bg-white shadow text-blue-600' : 'text-gray-500'}`}>{v.charAt(0).toUpperCase()+v.slice(1)} ({v==='inbox'?allInbox.length:sentMessages.length})</button>)}</div><div className="flex-1 overflow-y-auto space-y-2 mb-4">{msgView==='inbox' && allInbox.length===0 && <p className="text-sm text-gray-400 text-center py-12">No messages received yet</p>}{msgView==='sent' && sentMessages.length===0 && <p className="text-sm text-gray-400 text-center py-12">No messages sent yet</p>}{msgView==='inbox' && allInbox.map((m,i)=><div key={i} className="bg-white rounded-xl border p-4"><div className="flex justify-between mb-1"><p className="font-semibold text-sm text-gray-800">{m.patientName}</p><p className="text-xs text-gray-400">{new Date(m.sent_at).toLocaleDateString()}</p></div><p className="text-sm text-gray-700">{m.body}</p></div>)}{msgView==='sent' && sentMessages.map((m,i)=><div key={i} className="bg-blue-50 rounded-xl border border-blue-100 p-4"><div className="flex justify-between mb-1"><p className="font-semibold text-sm text-gray-800">To: {m.recipient_name}</p><p className="text-xs text-gray-400">{new Date(m.sent_at).toLocaleDateString()}</p></div><p className="text-sm text-gray-700">{m.body}</p></div>)}</div><div className="bg-white rounded-xl border p-4"><p className="font-semibold text-gray-700 text-sm mb-3">New message</p><select value={msgPatient?.userId||''} onChange={e=>setMsgPatient(patients.find(p=>String(p.userId)===e.target.value)||null)} className="w-full border rounded-lg p-2 text-sm mb-3 focus:ring-2 focus:ring-blue-400 outline-none"><option value="">Select patient...</option>{patients.map(p=><option key={p.userId} value={p.userId}>{p.name}</option>)}</select><textarea value={msgBody} onChange={e=>setMsgBody(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendMessage(msgPatient);}}} rows={4} placeholder="Type your message..." className="w-full border rounded-2xl px-4 py-3 text-sm resize-none focus:ring-2 focus:ring-blue-400 outline-none"/><button onClick={()=>sendMessage(msgPatient)} disabled={!msgBody.trim()||!msgPatient} className="mt-3 w-full bg-blue-500 text-white px-4 py-2.5 rounded-xl text-sm font-medium disabled:opacity-40">Send</button></div></div>}
+      {screen==='messages' && (() => { const chatPatient = msgPatient || selected || patients[0]; const thread = chatPatient ? [...patientMsgs(chatPatient).map(m=>({...m,_side:'in'})), ...sentToPatient(chatPatient).map(m=>({...m,_side:'out'}))].sort((a,b)=>new Date(a.sent_at)-new Date(b.sent_at)) : []; return <div className="flex-1 flex flex-col max-w-2xl mx-auto w-full p-4"><div className="bg-white rounded-xl border p-4 mb-4"><p className="font-semibold text-gray-700 text-sm mb-3">Select patient chat</p><select value={chatPatient?.userId||''} onChange={e=>setMsgPatient(patients.find(p=>String(p.userId)===e.target.value)||null)} className="w-full border rounded-lg p-2 text-sm focus:ring-2 focus:ring-blue-400 outline-none"><option value="">Select patient...</option>{patients.map(p=><option key={p.userId} value={p.userId}>{p.name}</option>)}</select></div><div className="bg-white rounded-xl border flex flex-col flex-1 min-h-[520px]"><div className="border-b bg-gray-50 px-4 py-3"><p className="font-semibold text-gray-800 text-sm">{chatPatient ? `Chat with ${chatPatient.name}` : 'Chat'}</p><p className="text-xs text-gray-400">Inbox and sent messages are combined into one conversation.</p></div><div className="flex-1 overflow-y-auto p-4 space-y-3">{!chatPatient && <p className="text-sm text-gray-400 text-center py-12">Select a patient to view chat</p>}{chatPatient && thread.length===0 && <p className="text-sm text-gray-400 text-center py-12">No messages yet</p>}{thread.map((m,i)=><div key={i} className={`flex ${m._side==='out' ? 'justify-end' : 'justify-start'}`}><div className={`rounded-2xl px-4 py-3 max-w-xs md:max-w-sm ${m._side==='out' ? 'bg-blue-500 text-white rounded-tr-sm' : 'bg-gray-100 text-gray-800 rounded-tl-sm'}`}><p className={`text-xs mb-1 ${m._side==='out' ? 'text-blue-100' : 'text-gray-400'}`}>{m._side==='out' ? 'You' : (m.sender_name || chatPatient.name)} · {new Date(m.sent_at).toLocaleDateString('en-TT',{day:'numeric',month:'short'})}</p><p className="text-sm leading-relaxed">{m.body}</p></div></div>)}</div><div className="border-t bg-white p-4"><textarea value={msgBody} onChange={e=>setMsgBody(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendMessage(chatPatient);}}} rows={3} placeholder={chatPatient ? `Type a message for ${chatPatient.name}...` : 'Select a patient first'} className="w-full border rounded-2xl px-4 py-3 text-sm resize-none focus:ring-2 focus:ring-blue-400 outline-none"/><button onClick={()=>sendMessage(chatPatient)} disabled={!msgBody.trim()||!chatPatient} className="mt-3 w-full bg-blue-500 text-white px-4 py-2.5 rounded-xl text-sm font-medium disabled:opacity-40">Send</button></div></div></div>; })()}
 
       {screen==='onboarding' && <div className="flex-1 overflow-y-auto p-4 max-w-2xl mx-auto w-full"><div className="bg-white rounded-xl p-5 border mb-4"><p className="font-semibold text-gray-800 mb-2 text-sm">Patient onboarding</p><p className="text-sm text-gray-500 mb-4">Create a standalone patient record. This is not linked to an existing shared patient list.</p>{!showOnboardForm && <button onClick={()=>setShowOnboardForm(true)} className="w-full bg-purple-600 text-white py-3 rounded-xl font-medium">Create New Patient Record</button>}</div>{showOnboardForm && <div className="bg-white rounded-xl p-5 border"><p className="font-semibold text-gray-800 mb-4 text-sm">New patient record</p><div className="grid grid-cols-1 md:grid-cols-2 gap-4">{[{label:'Full Name',key:'name',placeholder:'Patient name'},{label:'Email',key:'email',placeholder:'patient@example.com'},{label:'Date of Birth',key:'dob',type:'date'},{label:'Phone',key:'phone',placeholder:'868-XXX-XXXX'},{label:'Next Appointment',key:'nextAppointment',type:'date'},{label:'Allergies',key:'allergies',placeholder:'e.g. NKDA'}].map(f=><div key={f.key}><label className="text-xs text-gray-500 font-medium">{f.label}</label><input type={f.type||'text'} value={onboardForm[f.key]} onChange={e=>setOnboardForm({...onboardForm,[f.key]:e.target.value})} placeholder={f.placeholder||''} className="mt-1 w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-purple-400 outline-none"/></div>)}</div>{[{label:'Diagnosis / Medical History',key:'diagnosis',placeholder:'e.g. Type 2 Diabetes, Hypertension',rows:2},{label:'Current Dietary Goal',key:'currentGoal',placeholder:'e.g. Reduce sodium to under 2,000 mg/day.',rows:2},{label:'Clinical Notes',key:'clinicalNotes',placeholder:'PES statement, nutrition prescription, referrals...',rows:4}].map(f=><div key={f.key} className="mt-4"><label className="text-xs text-gray-500 font-medium">{f.label}</label><textarea value={onboardForm[f.key]} rows={f.rows} onChange={e=>setOnboardForm({...onboardForm,[f.key]:e.target.value})} placeholder={f.placeholder} className="mt-1 w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-purple-400 outline-none"/></div>)}<div className="flex gap-2 mt-5"><button onClick={()=>setShowOnboardForm(false)} className="flex-1 border rounded-xl py-3 text-gray-600 text-sm font-medium">Cancel</button><button onClick={saveOnboarding} className="flex-1 bg-purple-600 text-white py-3 rounded-xl font-medium">Save patient record</button></div></div>}</div>}
 
@@ -1976,53 +1976,47 @@ function MessagesInboxTab({ API, authHeaders, currentUser }) {
     }
   };
 
-  const list = view === 'inbox' ? messages : sent;
+  const thread = [
+    ...messages.map(m => ({ ...m, _side: 'in' })),
+    ...sent.map(m => ({ ...m, _side: 'out' }))
+  ].sort((a, b) => new Date(a.sent_at) - new Date(b.sent_at));
 
   return (
-    <div>
-      <div className="flex justify-between items-center mb-3">
-        <h2 className="text-base font-bold text-gray-800">Messages</h2>
-        <button onClick={() => setCompose(v => !v)} className="flex items-center gap-1.5 text-xs bg-green-500 text-white px-3 py-1.5 rounded-lg">
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-          {compose ? 'Cancel' : 'Compose'}
-        </button>
+    <div className="bg-white rounded-xl border flex flex-col min-h-[560px]">
+      <div className="border-b bg-gray-50 px-4 py-3">
+        <h2 className="text-base font-bold text-gray-800">Chat with Dietitian Portal</h2>
+        <p className="text-xs text-gray-400">Your messages and dietitian replies are shown in one conversation.</p>
       </div>
-      {compose && (
-        <div className="bg-white rounded-xl border p-4 mb-4">
-          <p className="text-sm font-semibold text-gray-700 mb-1">Message your dietitian</p>
-          <p className="text-xs text-gray-400 mb-3">Ensure data sharing is enabled in Stats so your dietitian can see your message.</p>
-          <textarea value={composeMsg} onChange={e => setComposeMsg(e.target.value)} rows={3} placeholder="Type your message..." className="w-full border rounded-xl p-3 text-sm focus:ring-2 focus:ring-green-500 outline-none mb-2"/>
-          <button onClick={sendToMyDietitian} disabled={!composeMsg.trim() || sending} className="w-full bg-green-500 text-white py-2.5 rounded-xl text-sm font-medium disabled:opacity-40">
-            {sending ? 'Sending...' : 'Send message'}
-          </button>
-        </div>
-      )}
-      <div className="flex bg-gray-100 rounded-xl p-1 mb-4">
-        {['inbox','sent'].map(v => (
-          <button key={v} onClick={() => setView(v)} className={`flex-1 py-2 rounded-lg text-sm font-medium transition-all ${v === view ? 'bg-white shadow text-blue-600' : 'text-gray-500'}`}>
-            {v.charAt(0).toUpperCase() + v.slice(1)} ({v === 'inbox' ? messages.length : sent.length})
-          </button>
-        ))}
-      </div>
-      {loading && <p className="text-center text-gray-400 py-8 text-sm">Loading...</p>}
-      {!loading && list.length === 0 && (
-        <div className="text-center py-12 text-gray-400">
-          <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="mx-auto mb-3 opacity-30"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
-          <p className="text-sm">{view === 'inbox' ? 'No messages from your dietitian yet' : 'No sent messages yet'}</p>
-        </div>
-      )}
-      <div className="space-y-2">
-        {!loading && list.map((m, i) => (
-          <div key={i} className={`flex ${view === 'sent' ? 'justify-end' : 'justify-start'}`}>
-            <div className={`rounded-2xl px-4 py-3 max-w-xs md:max-w-sm ${view === 'sent' ? 'bg-green-500 text-white rounded-tr-sm' : 'bg-white border rounded-tl-sm'}`}>
-              <p className={`text-xs mb-1 ${view === 'sent' ? 'text-green-100' : 'text-gray-400'}`}>
-                {view === 'inbox' ? (m.sender_name || 'Your Dietitian') : 'You'} · {new Date(m.sent_at).toLocaleDateString('en-TT', { day:'numeric', month:'short' })}
+
+      <div className="flex-1 overflow-y-auto p-4 space-y-3">
+        {loading && <p className="text-center text-gray-400 py-8 text-sm">Loading...</p>}
+        {!loading && thread.length === 0 && (
+          <div className="text-center py-12 text-gray-400">
+            <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="mx-auto mb-3 opacity-30"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+            <p className="text-sm">No messages yet</p>
+          </div>
+        )}
+        {!loading && thread.map((m, i) => (
+          <div key={i} className={`flex ${m._side === 'out' ? 'justify-end' : 'justify-start'}`}>
+            <div className={`rounded-2xl px-4 py-3 max-w-xs md:max-w-sm ${m._side === 'out' ? 'bg-green-500 text-white rounded-tr-sm' : 'bg-gray-100 text-gray-800 rounded-tl-sm'}`}>
+              <p className={`text-xs mb-1 ${m._side === 'out' ? 'text-green-100' : 'text-gray-400'}`}>
+                {m._side === 'out' ? 'You' : (m.sender_name || 'Dietitian')} · {new Date(m.sent_at).toLocaleDateString('en-TT', { day:'numeric', month:'short' })}
               </p>
               {m.type === 'recipe_recommendation' && <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full mb-1 inline-block">Recipe from your dietitian</span>}
-              <p className={`text-sm leading-relaxed ${view === 'sent' ? 'text-white' : 'text-gray-800'}`}>{m.body}</p>
+              <p className="text-sm leading-relaxed">{m.body}</p>
             </div>
           </div>
         ))}
+      </div>
+
+      <div className="border-t bg-white p-4">
+        <p className="text-sm font-semibold text-gray-700 mb-2">Message your dietitian</p>
+        <div className="flex items-end gap-2">
+          <textarea value={composeMsg} onChange={e => setComposeMsg(e.target.value)} onKeyDown={e=>{ if(e.key==='Enter'&&!e.shiftKey){ e.preventDefault(); sendToMyDietitian(); } }} rows={3} placeholder="Type your message..." className="flex-1 border rounded-2xl px-4 py-3 text-sm resize-none focus:ring-2 focus:ring-green-500 outline-none"/>
+          <button onClick={sendToMyDietitian} disabled={!composeMsg.trim() || sending} className="bg-green-500 text-white px-5 py-3 rounded-2xl text-sm font-medium disabled:opacity-40">
+            {sending ? 'Sending...' : 'Send'}
+          </button>
+        </div>
       </div>
     </div>
   );
