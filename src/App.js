@@ -44,6 +44,39 @@ function authHeaders() {
   return { 'Content-Type': 'application/json', Authorization: `Bearer ${token()}` };
 }
 
+
+function recipeIngredientsForBadge(recipe) {
+  if (!recipe) return [];
+
+  if (Array.isArray(recipe.ingredients) && recipe.ingredients.length > 0) {
+    return recipe.ingredients.map(item => {
+      if (typeof item === 'string') return item;
+      return item.ingredient_name || item.name || item.item_name || '';
+    }).filter(Boolean);
+  }
+
+  const raw = recipe.ingredients_text || recipe.ingredientsText || recipe.ingredients || '';
+  if (typeof raw === 'string') {
+    return raw.split(',').map(item => item.trim()).filter(Boolean);
+  }
+
+  return [];
+}
+
+function BackCircleButton({ onClick }) {
+  return (
+    <button
+      onClick={onClick}
+      className="w-10 h-10 rounded-full bg-white border shadow-sm flex items-center justify-center text-gray-700 hover:bg-gray-50 transition-all"
+      aria-label="Back to home"
+    >
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+        <polyline points="15 18 9 12 15 6" />
+      </svg>
+    </button>
+  );
+}
+
 function AuthScreen({ onLogin }) {
   const [mode, setMode]       = useState('login');
   const [name, setName]       = useState('');
@@ -583,11 +616,11 @@ function DietitianDashboard({ currentUser, onLogout, dbRecipes, config }) {
     { id:'messages',   label:'Messages',   sub:`${sentMessages.length} sent`,    color:'bg-blue-50 border-blue-200',     stroke:'#2563eb' },
     { id:'onboarding', label:'Onboarding', sub:'Add patient records',            color:'bg-purple-50 border-purple-200', stroke:'#9333ea' },
     { id:'resources',  label:'Resources',  sub:'Clinical guidelines',            color:'bg-orange-50 border-orange-200', stroke:'#ea580c' },
-    { id:'scheduler',  label:'Scheduler',  sub:'Appointments',                   color:'bg-gray-50 border-gray-200',     stroke:'#9ca3af' },
+    { id:'scheduler',  label:'Appointments',  sub:'Manage visits',                   color:'bg-gray-50 border-gray-200',     stroke:'#9ca3af' },
   ];
 
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col">
+    <div className="min-h-screen bg-gray-50 flex flex-col pb-20">
       {notification && <div className="fixed top-4 right-4 bg-green-500 text-white px-6 py-3 rounded-xl shadow-lg z-50">{notification}</div>}
 
       <div className="bg-white border-b px-5 py-4 flex justify-between items-center">
@@ -599,7 +632,7 @@ function DietitianDashboard({ currentUser, onLogout, dbRecipes, config }) {
           )}
           <div>
             <h1 className="text-base font-bold text-gray-800">
-              {screen === 'home' ? 'Dietitian Portal' : screen === 'patients' ? (selected ? selected.name : 'Patients') : screen === 'messages' ? 'Messages' : screen === 'onboarding' ? 'Patient Onboarding' : screen === 'resources' ? 'Clinical Resources' : 'Appointment Scheduler'}
+              {screen === 'home' ? 'Dietitian Portal' : screen === 'patients' ? (selected ? selected.name : 'Patients') : screen === 'messages' ? 'Messages' : screen === 'onboarding' ? 'Patient Onboarding' : screen === 'resources' ? 'Clinical Resources' : screen === 'settings' ? 'Settings' : 'Appointments'}
             </h1>
             {screen === 'home' && <p className="text-xs text-gray-400">Welcome, {currentUser.name}</p>}
           </div>
@@ -616,7 +649,7 @@ function DietitianDashboard({ currentUser, onLogout, dbRecipes, config }) {
           </div>
           <div className="grid grid-cols-2 gap-3">
             {TILES.map(tile => (
-              <button key={tile.id} onClick={() => setScreen(tile.id)} className={`${tile.color} border rounded-2xl p-5 text-left hover:shadow-md transition-all`}>
+              <button key={tile.id} onClick={() => setScreen(tile.id)} className={`${tile.color} border rounded-2xl p-5 min-h-36 flex flex-col items-center justify-center text-center hover:shadow-md transition-all`}>
                 <span className="block mb-3" style={{ color: tile.stroke }}>{TILE_ICONS[tile.id]}</span>
                 <p className="font-bold text-sm text-gray-800">{tile.label}</p>
                 <p className="text-xs text-gray-400 mt-0.5">{tile.sub}</p>
@@ -845,15 +878,37 @@ function DietitianDashboard({ currentUser, onLogout, dbRecipes, config }) {
         <div className="flex-1 overflow-y-auto p-4 max-w-2xl mx-auto w-full"><DietitianResourcePanel /></div>
       )}
 
+      {screen==='settings' && (
+        <div className="flex-1 overflow-y-auto">
+          <SettingsTab currentUser={currentUser} API={API} authHeaders={authHeaders} onLogout={onLogout} />
+        </div>
+      )}
+
       {screen==='scheduler' && (
         <div className="flex-1 flex items-center justify-center p-8">
           <div className="text-center">
             <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round" className="mx-auto mb-4"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
             <h2 className="text-xl font-bold text-gray-700 mb-2">Under Construction</h2>
-            <p className="text-sm text-gray-400 max-w-xs">The appointment scheduler will be available in a future release.</p>
+            <p className="text-sm text-gray-400 max-w-xs">The appointments module will be available in a future release.</p>
           </div>
         </div>
       )}
+
+      <div className="fixed bottom-0 left-0 right-0 bg-white border-t z-40">
+        <div className="flex max-w-md mx-auto">
+          {[
+            { id:'home', label:'Home', icon:<><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></> },
+            { id:'settings', label:'Settings', icon:<><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></> },
+            { id:'resources', label:'Resources', icon:<><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></> },
+          ].map(item => (
+            <button key={item.id} onClick={() => setScreen(item.id)} className={`flex-1 flex flex-col items-center py-3 transition-all ${screen === item.id ? 'text-green-600' : 'text-gray-400'}`}>
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">{item.icon}</svg>
+              <span className="text-xs mt-0.5 font-medium">{item.label}</span>
+              {screen === item.id && <div className="w-1 h-1 bg-green-500 rounded-full mt-0.5"/>}
+            </button>
+          ))}
+        </div>
+      </div>
     </div>
   );
 }
@@ -1091,13 +1146,17 @@ function HouseholdDashboard({ currentUser, onLogout, config }) {
         </div>
         <div className="flex items-center gap-2">
           {unreadCount > 0 && <span className="bg-red-500 text-white text-xs w-5 h-5 rounded-full flex items-center justify-center">{unreadCount}</span>}
-          <button onClick={() => setShowResources(true)} className="text-xs bg-green-50 text-green-600 px-3 py-1.5 rounded-lg border border-green-200">Resources</button>
-          <button onClick={() => setShowPdfOptions(true)} className="text-xs bg-blue-50 text-blue-600 px-3 py-1.5 rounded-lg border border-blue-200">Share PDF</button>
           <button onClick={onLogout} className="text-xs text-gray-400 hover:text-red-500 px-3 py-1.5 border rounded-lg">Sign out</button>
         </div>
       </div>
 
       <div className="max-w-2xl mx-auto px-4 pt-4">
+
+        {activeTab !== 'home' && (
+          <div className="mb-4">
+            <BackCircleButton onClick={() => setActiveTab('home')} />
+          </div>
+        )}
 
         {aiInsight && activeTab === 'pantry' && (
           <div className="bg-gradient-to-r from-green-50 to-emerald-50 border border-green-200 rounded-2xl p-4 mb-4">
@@ -1127,10 +1186,21 @@ function HouseholdDashboard({ currentUser, onLogout, config }) {
 
 {activeTab === 'home' && (
   <div className="p-5 pb-24">
-    <h2 className="text-xl font-bold text-gray-800 mb-1">
-      {greeting()}, {currentUser?.name || 'there'}
-    </h2>
-    <p className="text-sm text-gray-500 mb-5">
+    <div className="bg-gradient-to-r from-green-50 to-emerald-50 border border-green-200 rounded-2xl p-4 mb-5">
+      <div className="flex items-start gap-3">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#1D9E75" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+          <rect x="3" y="11" width="18" height="10" rx="2"/><circle cx="12" cy="5" r="2"/><path d="M12 7v4"/><path d="M8 15h.01M16 15h.01"/><line x1="3" y1="16" x2="1" y2="16"/><line x1="21" y1="16" x2="23" y2="16"/>
+        </svg>
+        <div>
+          <p className="text-xs font-semibold text-green-700 mb-1">Smart insight</p>
+          <p className="text-sm text-green-800 leading-relaxed">
+            {aiInsight || 'Add pantry items with expiry dates to unlock smarter recipe suggestions, waste alerts, and meal planning insights.'}
+          </p>
+        </div>
+      </div>
+    </div>
+
+    <p className="text-sm text-gray-500 mb-5 text-center">
       What would you like to do today?
     </p>
 
@@ -1142,14 +1212,13 @@ function HouseholdDashboard({ currentUser, onLogout, config }) {
         { tab: 'mealplan', label: 'Planner', sub: 'Weekly meals', icon: <><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></> },
         { tab: 'stats', label: 'Stats', sub: 'Waste & rewards', icon: <><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></> },
         { tab: 'messages_inbox', label: 'Messages', sub: 'Dietitian notes', icon: <><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></> },
-        { tab: 'settings', label: 'Settings', sub: 'Profile & sharing', icon: <><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06A1.65 1.65 0 0 0 15 19.4a1.65 1.65 0 0 0-1 .6 1.65 1.65 0 0 0-.4 1.1V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-.4-1.1 1.65 1.65 0 0 0-1-.6 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15a1.65 1.65 0 0 0-.6-1 1.65 1.65 0 0 0-1.1-.4H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.1-.4 1.65 1.65 0 0 0 .6-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06A2 2 0 1 1 7.23 3.5l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-.6 1.65 1.65 0 0 0 .4-1.1V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 .4 1.1 1.65 1.65 0 0 0 1 .6 1.65 1.65 0 0 0 1.82-.33l.06-.06A2 2 0 1 1 20.5 7.23l-.06.06A1.65 1.65 0 0 0 19.4 9c.14.37.36.7.6 1 .31.25.7.4 1.1.4H21a2 2 0 1 1 0 4h-.09c-.4 0-.79.15-1.1.4-.24.3-.46.63-.6 1z"/></> },
       ].map(item => (
         <button
           key={item.tab}
           onClick={() => setActiveTab(item.tab)}
-          className="bg-white border rounded-2xl p-5 text-left shadow-sm hover:shadow-md transition-all"
+          className="bg-white border rounded-2xl p-5 min-h-36 flex flex-col items-center justify-center text-center shadow-sm hover:shadow-md transition-all"
         >
-          <svg className="text-green-600 mb-3" width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+          <svg className="text-green-600 mb-3" width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
             {item.icon}
           </svg>
           <p className="font-bold text-gray-800">{item.label}</p>
@@ -1270,7 +1339,7 @@ function HouseholdDashboard({ currentUser, onLogout, config }) {
                       )}
                     </div>
                   </div>
-                  <RecipeFoodGroupBadge ingredients={recipe.ingredients || []} size={48} />
+                  <RecipeFoodGroupBadge ingredients={recipeIngredientsForBadge(recipe)} size={48} />
                 </div>
               </div>
             ))}
@@ -1673,19 +1742,16 @@ function HouseholdDashboard({ currentUser, onLogout, config }) {
       <div className="fixed bottom-0 left-0 right-0 bg-white border-t z-40">
         <div className="flex max-w-2xl mx-auto">
           {[
-            { tab: 'pantry',     label: 'Pantry',  icon: <><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></> },
-            { tab: 'recipes',    label: 'Recipes', icon: <><path d="M6 13.87A4 4 0 0 1 7.41 6a5.11 5.11 0 0 1 1.05-1.54 5 5 0 0 1 7.08 0A5.11 5.11 0 0 1 16.59 6 4 4 0 0 1 18 13.87V21H6Z"/><line x1="6" y1="17" x2="18" y2="17"/></> },
-            { tab: 'allrecipes', label: 'Browse',  icon: <><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></> },
-            { tab: 'mealplan',   label: 'Planner', icon: <><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></> },
-            { tab: 'stats',      label: 'Stats',   icon: <><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></> },
-            { tab: 'messages_inbox', label: 'Messages', icon: <><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></> },
-            { tab: 'settings',   label: 'Settings', icon: <><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></> },
-          ].map(({ tab, label, icon }) => (
-            <button key={tab} onClick={() => setActiveTab(tab)}
-              className={`flex-1 flex flex-col items-center py-3 transition-all ${activeTab === tab ? 'text-green-600' : 'text-gray-400'}`}>
+            { key:'home', label:'Home', action: () => setActiveTab('home'), active: activeTab === 'home', icon:<><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></> },
+            { key:'settings', label:'Settings', action: () => setActiveTab('settings'), active: activeTab === 'settings', icon:<><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></> },
+            { key:'share', label:'Share PDF', action: () => setShowPdfOptions(true), active: false, icon:<><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><path d="M12 18v-6"/><path d="M9 15l3 3 3-3"/></> },
+            { key:'resources', label:'Resources', action: () => setShowResources(true), active: showResources, icon:<><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></> },
+          ].map(({ key, label, action, active, icon }) => (
+            <button key={key} onClick={action}
+              className={`flex-1 flex flex-col items-center py-3 transition-all ${active ? 'text-green-600' : 'text-gray-400'}`}>
               <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">{icon}</svg>
               <span className="text-xs mt-0.5 font-medium">{label}</span>
-              {activeTab === tab && <div className="w-1 h-1 bg-green-500 rounded-full mt-0.5"/>}
+              {active && <div className="w-1 h-1 bg-green-500 rounded-full mt-0.5"/>}
             </button>
           ))}
         </div>
@@ -1869,7 +1935,7 @@ function AllRecipesTab({ API, authHeaders, notify, config }) {
               {r.missing > 0 && r.missingItems?.length > 0 && <p className="text-xs text-red-500 mt-1">Need: {r.missingItems.slice(0,3).join(', ')}</p>}
               {r.dietary_tags && <div className="flex flex-wrap gap-1 mt-1">{r.dietary_tags.split(',').slice(0,2).map(tag=><span key={tag} className="text-xs bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded-full">{tag.trim()}</span>)}</div>}
             </div>
-            <RecipeFoodGroupBadge ingredients={r.ingredients || []} size={48} />
+            <RecipeFoodGroupBadge ingredients={recipeIngredientsForBadge(r)} size={48} />
           </div>
         </div>
       ))}
