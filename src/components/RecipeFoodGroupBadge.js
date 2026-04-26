@@ -13,83 +13,41 @@ const MISSING_COLOR = '#d4d4d4';
 
 const KEYWORDS = [
   // Staples
-  ['rice', 'Staples'],
-  ['flour', 'Staples'],
-  ['bread', 'Staples'],
-  ['oats', 'Staples'],
-  ['corn', 'Staples'],
-  ['dasheen', 'Staples'],
-  ['yam', 'Staples'],
-  ['cassava', 'Staples'],
-  ['potato', 'Staples'],
-  ['sweet potato', 'Staples'],
-  ['provision', 'Staples'],
-  ['pasta', 'Staples'],
+  ['rice', 'Staples'], ['flour', 'Staples'], ['bread', 'Staples'], ['oats', 'Staples'],
+  ['corn', 'Staples'], ['dasheen', 'Staples'], ['yam', 'Staples'], ['cassava', 'Staples'],
+  ['potato', 'Staples'], ['sweet potato', 'Staples'], ['provision', 'Staples'], ['pasta', 'Staples'],
+  ['cereal', 'Staples'], ['roti', 'Staples'], ['hops', 'Staples'], ['noodle', 'Staples'],
 
   // Legumes & Nuts
-  ['lentil', 'Legumes & Nuts'],
-  ['bean', 'Legumes & Nuts'],
-  ['beans', 'Legumes & Nuts'],
-  ['pea', 'Legumes & Nuts'],
-  ['peas', 'Legumes & Nuts'],
-  ['channa', 'Legumes & Nuts'],
-  ['chickpea', 'Legumes & Nuts'],
-  ['split pea', 'Legumes & Nuts'],
-  ['dhal', 'Legumes & Nuts'],
-  ['dal', 'Legumes & Nuts'],
-  ['peanut', 'Legumes & Nuts'],
-  ['almond', 'Legumes & Nuts'],
-  ['cashew', 'Legumes & Nuts'],
+  ['lentil', 'Legumes & Nuts'], ['bean', 'Legumes & Nuts'], ['beans', 'Legumes & Nuts'],
+  ['pea', 'Legumes & Nuts'], ['peas', 'Legumes & Nuts'], ['channa', 'Legumes & Nuts'],
+  ['chickpea', 'Legumes & Nuts'], ['split pea', 'Legumes & Nuts'], ['dhal', 'Legumes & Nuts'],
+  ['dal', 'Legumes & Nuts'], ['peanut', 'Legumes & Nuts'], ['almond', 'Legumes & Nuts'],
+  ['cashew', 'Legumes & Nuts'], ['walnut', 'Legumes & Nuts'], ['pecan', 'Legumes & Nuts'],
 
   // Foods from Animals
-  ['chicken', 'Foods from Animals'],
-  ['beef', 'Foods from Animals'],
-  ['pork', 'Foods from Animals'],
-  ['fish', 'Foods from Animals'],
-  ['salmon', 'Foods from Animals'],
-  ['tuna', 'Foods from Animals'],
-  ['shrimp', 'Foods from Animals'],
-  ['egg', 'Foods from Animals'],
-  ['eggs', 'Foods from Animals'],
-  ['milk', 'Foods from Animals'],
-  ['yogurt', 'Foods from Animals'],
-  ['yoghurt', 'Foods from Animals'],
-  ['cheese', 'Foods from Animals'],
+  ['chicken', 'Foods from Animals'], ['beef', 'Foods from Animals'], ['pork', 'Foods from Animals'],
+  ['fish', 'Foods from Animals'], ['salmon', 'Foods from Animals'], ['tuna', 'Foods from Animals'],
+  ['shrimp', 'Foods from Animals'], ['egg', 'Foods from Animals'], ['eggs', 'Foods from Animals'],
+  ['milk', 'Foods from Animals'], ['yogurt', 'Foods from Animals'], ['yoghurt', 'Foods from Animals'],
+  ['cheese', 'Foods from Animals'], ['turkey', 'Foods from Animals'], ['lamb', 'Foods from Animals'],
 
   // Fruits
-  ['banana', 'Fruits'],
-  ['mango', 'Fruits'],
-  ['apple', 'Fruits'],
-  ['orange', 'Fruits'],
-  ['lime', 'Fruits'],
-  ['lemon', 'Fruits'],
-  ['avocado', 'Fruits'],
-  ['berries', 'Fruits'],
+  ['banana', 'Fruits'], ['mango', 'Fruits'], ['apple', 'Fruits'], ['orange', 'Fruits'],
+  ['lime', 'Fruits'], ['lemon', 'Fruits'], ['avocado', 'Fruits'], ['berries', 'Fruits'],
+  ['berry', 'Fruits'], ['pineapple', 'Fruits'], ['watermelon', 'Fruits'], ['papaya', 'Fruits'],
 
   // Vegetables
-  ['dasheen bush', 'Vegetables'],
-  ['callaloo', 'Vegetables'],
-  ['spinach', 'Vegetables'],
-  ['okra', 'Vegetables'],
-  ['pumpkin', 'Vegetables'],
-  ['tomato', 'Vegetables'],
-  ['onion', 'Vegetables'],
-  ['garlic', 'Vegetables'],
-  ['carrot', 'Vegetables'],
-  ['broccoli', 'Vegetables'],
-  ['cabbage', 'Vegetables'],
-  ['lettuce', 'Vegetables'],
-  ['cucumber', 'Vegetables'],
-  ['green bean', 'Vegetables'],
+  ['dasheen bush', 'Vegetables'], ['callaloo', 'Vegetables'], ['spinach', 'Vegetables'],
+  ['okra', 'Vegetables'], ['pumpkin', 'Vegetables'], ['tomato', 'Vegetables'], ['onion', 'Vegetables'],
+  ['garlic', 'Vegetables'], ['carrot', 'Vegetables'], ['broccoli', 'Vegetables'], ['cabbage', 'Vegetables'],
+  ['lettuce', 'Vegetables'], ['cucumber', 'Vegetables'], ['green bean', 'Vegetables'],
+  ['pepper', 'Vegetables'], ['celery', 'Vegetables'], ['seasoning', 'Vegetables'],
 
   // Fats & Oils
-  ['oil', 'Fats & Oils'],
-  ['olive oil', 'Fats & Oils'],
-  ['canola oil', 'Fats & Oils'],
-  ['coconut oil', 'Fats & Oils'],
-  ['butter', 'Fats & Oils'],
-  ['margarine', 'Fats & Oils'],
-  ['mayonnaise', 'Fats & Oils'],
+  ['oil', 'Fats & Oils'], ['olive oil', 'Fats & Oils'], ['canola oil', 'Fats & Oils'],
+  ['coconut oil', 'Fats & Oils'], ['butter', 'Fats & Oils'], ['margarine', 'Fats & Oils'],
+  ['mayonnaise', 'Fats & Oils'], ['avocado oil', 'Fats & Oils'],
 ];
 
 function normaliseIngredients(ingredients) {
@@ -108,7 +66,7 @@ function normaliseIngredients(ingredients) {
         if (typeof item === 'string') return item;
         return item.ingredient_name || item.name || item.item_name || '';
       })
-      .map(item => item.trim().toLowerCase())
+      .map(item => String(item).trim().toLowerCase())
       .filter(Boolean);
   }
 
@@ -117,7 +75,6 @@ function normaliseIngredients(ingredients) {
 
 function getCoverage(ingredients) {
   const coverage = {};
-
   const normalised = normaliseIngredients(ingredients);
 
   normalised.forEach(ingredient => {
@@ -144,14 +101,12 @@ function segmentPath(index, cx, cy, r) {
   const endAngle = startAngle + 60;
   const p1 = hexPoint(cx, cy, r, startAngle);
   const p2 = hexPoint(cx, cy, r, endAngle);
-
   return `M ${cx} ${cy} L ${p1.x} ${p1.y} L ${p2.x} ${p2.y} Z`;
 }
 
 export default function RecipeFoodGroupBadge({ ingredients = [], size = 48 }) {
   const coverage = getCoverage(ingredients);
   const total = Object.keys(coverage).length;
-
   const cx = 50;
   const cy = 50;
   const r = 42;
