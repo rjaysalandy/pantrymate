@@ -1,6 +1,6 @@
 import React, { useState, useRef } from 'react';
 
-// ─── Rules — must mirror utils/passwordValidator.js ───────────────────────────
+
 const RULES = [
   { id: 'length',    label: 'At least 8 characters',              test: p => p.length >= 8 },
   { id: 'uppercase', label: 'At least one uppercase letter (A–Z)', test: p => /[A-Z]/.test(p) },
@@ -13,12 +13,7 @@ function evalRules(pwd) {
   return RULES.map(r => ({ ...r, passed: r.test(pwd) }));
 }
 
-// ─── PasswordSection ──────────────────────────────────────────────────────────
-// Props:
-//   onChange(password, isValid)  — called whenever value or validity changes
-//
-// Usage on register page:
-//   <PasswordSection onChange={(pwd, valid) => { setPassword(pwd); setPwValid(valid); }} />
+
 export default function PasswordSection({ onChange }) {
   const [create,        setCreate]        = useState('');
   const [confirm,       setConfirm]       = useState('');
@@ -35,7 +30,7 @@ export default function PasswordSection({ onChange }) {
   const confirmMismatch = confirm.length > 0 && create !== confirm;
   const isFullyValid = allPassed && confirmMatch;
 
-  // Determine create box border color
+  
   function createBorder() {
     if (!create.length) return '#e0e0e0';
     if (submitted && !allPassed) return '#d03030';
@@ -43,7 +38,7 @@ export default function PasswordSection({ onChange }) {
     return '#e0e0e0';
   }
 
-  // Determine confirm box border color
+  
   function confirmBorder() {
     if (!confirm.length) return '#e0e0e0';
     if (confirmMatch) return '#20b040';
@@ -64,7 +59,7 @@ export default function PasswordSection({ onChange }) {
     onChange?.(create, allPassed && create === val);
   }
 
-  // When user presses Enter on create field: validate immediately
+  
   function handleCreateKeyDown(e) {
     if (e.key === 'Enter') {
       setSubmitted(true);
@@ -72,12 +67,12 @@ export default function PasswordSection({ onChange }) {
     }
   }
 
-  // Rule dot color
+  
   function ruleColor(rule) {
-    if (!create.length) return '#d0d0d0';          // gray — not yet started
-    if (rule.passed)    return '#20b040';           // green — satisfied
-    if (submitted)      return '#d03030';           // red — failed on submit attempt
-    return '#d0d0d0';                               // gray — not yet satisfied
+    if (!create.length) return '#d0d0d0';          
+    if (rule.passed)    return '#20b040';           
+    if (submitted)      return '#d03030';           
+    return '#d0d0d0';                               
   }
 
   function ruleTextColor(rule) {
@@ -191,7 +186,7 @@ export default function PasswordSection({ onChange }) {
   );
 }
 
-// ─── Styles ───────────────────────────────────────────────────────────────────
+// ─── Styles 
 const styles = {
   wrapper: {
     display: 'flex',

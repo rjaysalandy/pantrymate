@@ -213,9 +213,9 @@ return (
   );
 }
 
-// ── Demo patients — shown to all dietitian logins ─────────────────────────
+// Demo patients
 const DEMO_PATIENTS = [
-  // ── Demo 1: 1 NCD — Type 2 Diabetes ─────────────────────────────────────────
+  
   {
     userId: 'demo-1',
     name:   'Aaliyah Ramsaran',
@@ -267,7 +267,7 @@ const DEMO_PATIENTS = [
       consentDate: '2026-03-28', dietitianSignature: 'RD L. Balkaran', lastUpdated: '2026-04-10',
     },
   },
-  // ── Demo 2: 1 NCD — Hypertension ────────────────────────────────────────────
+  
   {
     userId: 'demo-2',
     name:   'Marcus Phillip',
@@ -317,7 +317,7 @@ const DEMO_PATIENTS = [
       consentDate: '2026-03-15', dietitianSignature: 'RD L. Balkaran', lastUpdated: '2026-04-08',
     },
   },
-  // ── Demo 3: 2 Related NCDs — Type 2 Diabetes + Dyslipidaemia ────────────────
+  
   {
     userId: 'demo-3',
     name:   'Priya Maharaj',
@@ -369,7 +369,7 @@ const DEMO_PATIENTS = [
       consentDate: '2026-02-10', dietitianSignature: 'RD L. Balkaran', lastUpdated: '2026-04-09',
     },
   },
-  // ── Demo 4: 2 Related NCDs — Hypertension + Chronic Kidney Disease Stage 3 ──
+  
   {
     userId: 'demo-4',
     name:   'Desmond Charles',
@@ -421,7 +421,7 @@ const DEMO_PATIENTS = [
       consentDate: '2026-01-20', dietitianSignature: 'RD L. Balkaran', lastUpdated: '2026-04-11',
     },
   },
-  // ── Demo 5: Healthy ──────────────────────────────────────────────────────────
+  
   {
     userId: 'demo-5',
     name:   'Kezia Thomas',
@@ -1022,9 +1022,9 @@ function HouseholdDashboard({ currentUser, onLogout, config }) {
   if (!r.ok) return;
   const item = await r.json();
 
-  // Match the returned category name to a category ID from the loaded list
+  
   const matchedCategory = categories.find(c => c.name.toLowerCase() === item.category.toLowerCase());
-  // Match the returned unit name to a unit ID from the loaded list
+  
   const matchedUnit = units.find(u => u.name.toLowerCase() === item.unit.toLowerCase() || u.abbreviation.toLowerCase() === item.unit.toLowerCase());
 
   setNewItem({
@@ -1822,7 +1822,7 @@ function AllRecipesTab({ API, authHeaders, notify, config }) {
 
   const DIET_TAGS  = config.dietTags;
   const MEAL_TYPES = config.mealTypes;
-// eslint-disable-next-line react-hooks/exhaustive-deps
+
   useEffect(() => {
   const fetchAll = async () => {
     setLoading(true);
@@ -1837,7 +1837,7 @@ function AllRecipesTab({ API, authHeaders, notify, config }) {
   };
 
   fetchAll();
-// eslint-disable-next-line react-hooks/exhaustive-deps
+
 }, [search, mealType, dietTag, condition]);
 
   return (
