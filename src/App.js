@@ -869,6 +869,7 @@ function HouseholdDashboard({ currentUser, onLogout, config }) {
   const [dismissedRecs, setDismissedRecs]     = useState([]);
   const [showResources, setShowResources]     = useState(false);
   const [foodCoverage, setFoodCoverage]       = useState({ coverage: {}, total_groups: 0 });
+  const [showBarcodeModal, setShowBarcodeModal] = useState(false);
 
   const DAYS       = config.days;
   const SLOTS      = config.mealSlots;
@@ -1017,11 +1018,11 @@ function HouseholdDashboard({ currentUser, onLogout, config }) {
     await fetchMealPlan(); notify('Meal plan saved!');
   };
 
+  // DELETE THIS ENTIRE BLOCK
   const scanBarcode = async () => {
   const r = await fetch(`${API}/api/barcode/scan`, { headers: authHeaders() });
   if (!r.ok) return;
   const item = await r.json();
-
   
   const matchedCategory = categories.find(c => c.name.toLowerCase() === item.category.toLowerCase());
   
@@ -1037,6 +1038,13 @@ function HouseholdDashboard({ currentUser, onLogout, config }) {
   setShowAddForm(true);
 };
 
+const scanBarcode = () => {
+  setShowBarcodeModal(true);
+};
+
+const scanBarcode = () => {
+  setShowBarcodeModal(true);
+};
   const stats = {
     total:    wasteLog.length,
     used:     wasteLog.filter(w => w.action === 'used').length,
@@ -1699,6 +1707,34 @@ function HouseholdDashboard({ currentUser, onLogout, config }) {
           })}
         </div>
       </div>
+      {showBarcodeModal && (
+  <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
+    <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-5 text-center">
+      <div className="flex justify-between items-center mb-4">
+        <h2 className="text-lg font-semibold">Barcode Scanner</h2>
+        <button onClick={() => setShowBarcodeModal(false)}>×</button>
+      </div>
+
+      <div className="bg-black h-56 rounded-xl flex items-center justify-center mb-4 text-white/60">
+        Camera preview
+      </div>
+
+      <p className="text-sm text-gray-600 mb-4">
+        Camera-based barcode scanning is under construction and not yet available.
+      </p>
+
+      <button
+        onClick={() => {
+          setShowBarcodeModal(false);
+          setShowAddForm(true);
+        }}
+        className="bg-green-600 text-white px-4 py-2 rounded-xl w-full"
+      >
+        Add Item Manually
+      </button>
+    </div>
+  </div>
+)}
     </div>
   );
 }
