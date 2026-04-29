@@ -1019,32 +1019,10 @@ function HouseholdDashboard({ currentUser, onLogout, config }) {
   };
 
   // DELETE THIS ENTIRE BLOCK
-  const scanBarcode = async () => {
-  const r = await fetch(`${API}/api/barcode/scan`, { headers: authHeaders() });
-  if (!r.ok) return;
-  const item = await r.json();
-  
-  const matchedCategory = categories.find(c => c.name.toLowerCase() === item.category.toLowerCase());
-  
-  const matchedUnit = units.find(u => u.name.toLowerCase() === item.unit.toLowerCase() || u.abbreviation.toLowerCase() === item.unit.toLowerCase());
+  const scanBarcode = () => {
+    setShowBarcodeModal(true);
+  };
 
-  setNewItem({
-    name:        item.name,
-    category_id: matchedCategory ? matchedCategory.id : '',
-    unit_id:     matchedUnit     ? matchedUnit.id     : '',
-    quantity:    item.quantity,
-    expiryDate:  item.expiryDate || ''
-  });
-  setShowAddForm(true);
-};
-
-const scanBarcode = () => {
-  setShowBarcodeModal(true);
-};
-
-const scanBarcode = () => {
-  setShowBarcodeModal(true);
-};
   const stats = {
     total:    wasteLog.length,
     used:     wasteLog.filter(w => w.action === 'used').length,
@@ -1184,7 +1162,7 @@ const scanBarcode = () => {
               <button onClick={() => setShowAddForm(true)} className="flex-1 bg-green-500 text-white py-3 rounded-xl font-medium text-sm flex items-center justify-center gap-2">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>Add item</button>
               <button onClick={scanBarcode} className="flex-1 bg-blue-500 text-white py-3 rounded-xl font-medium text-sm flex items-center justify-center gap-2">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>Scan barcode (Demo)</button>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>Scan barcode</button>
             </div>
             {leftovers.length > 0 && (
               <div className="mb-4">
@@ -1967,8 +1945,7 @@ function MessagesInboxTab({ API, authHeaders, currentUser }) {
   const [messages, setMessages]     = useState([]);
   const [sent, setSent]             = useState([]);
   const [loading, setLoading]       = useState(true);
-  const [view, setView]             = useState('inbox');
-  const [compose, setCompose]       = useState(false);
+  const [, setCompose]       = useState(false);
   const [composeMsg, setComposeMsg] = useState('');
   const [sending, setSending]       = useState(false);
 
@@ -2074,7 +2051,7 @@ export default function App() {
         } else { localStorage.removeItem('token'); }
       } catch { localStorage.removeItem('token'); }
     }
-  }, []); 
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!currentUser) return;
